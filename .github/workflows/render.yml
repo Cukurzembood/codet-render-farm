@@ -1,0 +1,81 @@
+name: render-farm
+
+on:
+  workflow_dispatch:
+    inputs:
+      total:
+        description: "Total frames in story.js"
+        default: "2095"
+  push:
+    branches: [main]
+    paths:
+      - "project/**"
+      - ".github/workflows/render.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        slice: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install playwright + chromium
+        working-directory: project
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Fetch three.module.js (r160)
+        run: |
+          mkdir -p project/web/lib
+          curl -sL -o project/web/lib/three.module.js https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js
+          ls -la project/web/lib
+      - name: Render my slice
+        working-directory: project
+        env:
+          TOTAL: ${{ inputs.total || '2095' }}
+          CHUNKS: "10"
+          SLICE: ${{ matrix.slice }}
+        run: |
+          CHROME_BIN=$(find ~/.cache/ms-playwright -name chrome -type f | head -1)
+          echo "chrome: $CHROME_BIN"
+          PER=$(( (TOTAL + CHUNKS - 1) / CHUNKS ))
+          A=$(( SLICE * PER ))
+          B=$(( A + PER - 1 ))
+          if [ $B -ge $TOTAL ]; then B=$(( TOTAL - 1 )); fi
+          echo "slice $SLICE -> frames $A-$B"
+          CHROME=$CHROME_BIN node render.mjs frames "$A-$B"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frames-${{ matrix.slice }}
+          path: project/frames/*.jpg
+          retention-days: 2
+
+  assemble:
+    needs: render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: allframes
+          pattern: frames-*
+          merge-multiple: true
+      - name: Zip frames and publish as release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOTAL: ${{ inputs.total || '2095' }}
+        run: |
+          COUNT=$(ls allframes/*.jpg | wc -l)
+          echo "frames collected: $COUNT / $TOTAL"
+          (cd allframes && zip -q ../frames.zip *.jpg)
+          ls -la frames.zip
+          gh release delete latest-render --yes --cleanup-tag || true
+          gh release create latest-render frames.zip --title "Latest farm render" --notes "frames: $COUNT / $TOTAL"
