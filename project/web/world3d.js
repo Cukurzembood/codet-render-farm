@@ -195,7 +195,7 @@ export function createWorld(scene) {
       const sp = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 12), flatS(cc)); sp.position.set(lx, ly, lz); sp.scale.y = 0.88; sp.castShadow = true; t.add(sp);
     }
   };
-  tree(3.2, -8.6, 1.2); tree(-5.6, -13, 1.4); tree(10.8, -12.8, 1.1); tree(-12.8, -9.5, 1.25);
+  tree(7.6, -12.6, 1.2); tree(-5.6, -13, 1.4); tree(10.8, -12.8, 1.1); tree(-12.8, -9.5, 1.25);
   { // tufts + rocks + path stones
     const tc = document.createElement('canvas'); tc.width = tc.height = 128;
     const tx2 = tc.getContext('2d'); tx2.lineCap = 'round';
@@ -419,9 +419,7 @@ export function createBeach() {
     net.scale.y = 0.45;
     return bt;
   };
-  boat(-3.4, -4.2, 0.5, 0.13);
-  boat(2.8, -6.4, -0.9, -0.18);
-  boat(7.6, -3.4, 1.9, 0.08);
+  const boats = [boat(-3.4, -4.2, 0.5, 0.13), boat(2.8, -6.4, -0.9, -0.18), boat(7.6, -3.4, 1.9, 0.08)];
   // puddle glints on the mud + scattered shells/rocks
   for (let i = 0; i < 7; i++) {
     const p = new THREE.Mesh(new THREE.CircleGeometry(0.5 + (i % 3) * 0.3, 12), new THREE.MeshStandardMaterial({ color: '#8fa5a8', roughness: 0.15 }));
@@ -432,5 +430,5 @@ export function createBeach() {
     foam.position.z = -11.2 - recede * 26;
     sea.material.color.set(recede > 0.4 ? '#74888f' : '#7d99a4');
   }
-  return { group: b, setSea };
+  return { group: b, setSea, boatA: boats[0], boatB: boats[1], boatC: boats[2] };
 }

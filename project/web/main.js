@@ -27,7 +27,7 @@ beach.group.rotation.y = Math.PI; // sea extends to +z, mud band faces the kampu
 beach.setSea(0.85); // still receded from Ep.2's ending — the water is out, for now
 scene.add(beach.group);
 const B0 = {};
-for (const b of ['boatA', 'boatB']) if (beach[b]) B0[b] = { p: beach[b].position.clone(), ry: beach[b].rotation.y, rz: beach[b].rotation.z, rx: beach[b].rotation.x };
+for (const b of ['boatB', 'boatC']) if (beach[b]) B0[b] = { p: beach[b].position.clone(), ry: beach[b].rotation.y, rz: beach[b].rotation.z, rx: beach[b].rotation.x };
 
 const codet = createCodet(); scene.add(codet.group);
 const busiti = createVillager('busiti'); scene.add(busiti.group);
@@ -102,12 +102,15 @@ const PALM = [3.4, -8.8];
     px += 0.045; seg.position.set(px, 0.42 + i * 0.8, pz); seg.rotation.z = -0.055;
     seg.castShadow = true; scene.add(seg);
   }
+  const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 2.0, 8), trunkM);
+  branch.position.set(3.4, 3.82, -9.05); branch.rotation.z = Math.PI / 2; branch.rotation.x = 0.05;
+  branch.castShadow = true; scene.add(branch);
   const frondM = new THREE.MeshStandardMaterial({ color: 0x4d7d3a, roughness: 0.9, side: THREE.DoubleSide });
   for (let i = 0; i < 8; i++) {
     const fr = new THREE.Mesh(new THREE.ConeGeometry(0.30, 2.6, 5), frondM);
-    const a = (i / 8) * Math.PI * 2;
-    fr.position.set(px + Math.cos(a) * 0.9, 5.35, pz + Math.sin(a) * 0.9);
-    fr.rotation.set(Math.sin(a) * 1.15, 0, -Math.cos(a) * 1.15);
+    const a = ((i + 0.5) / 8) * Math.PI * 2;
+    fr.position.set(px + Math.cos(a) * 1.2, 5.8, pz + Math.sin(a) * 1.2);
+    fr.rotation.set(Math.sin(a) * 0.98, 0, -Math.cos(a) * 0.98);
     fr.castShadow = true; scene.add(fr);
   }
 }
@@ -183,12 +186,12 @@ const CAMS = {
   S4: K2('S4', [1.95, 1.55, 25.9], [3.2, 1.28, 23.6], 36, [2.35, 1.5, 25.3], [3.2, 1.28, 23.6], 35),
   S5: K2('S5', [4.9, 1.5, 27.6], [3.2, 1.22, 23.6], 38),
   S6: K2('S6', [-5.5, 1.15, 19.5], [3, 2.4, 90], 40),
-  S8: K2('S8', [10.5, 2.1, 19], [-1, 0.8, 31], 42),
+  S8: K2('S8', [-1.2, 1.55, 7.5], [-5.4, 0.75, 25], 40, [-1.5, 1.5, 9.5], [-5.2, 0.75, 23], 40),
   S9: K2('S9', [5.7, 0.8, -5.7], [3.45, 1.2, -8.8], 40, [5.7, 0.85, -5.7], [3.55, 4.35, -8.75], 40),
   S10: K2('S10', [1.7, 1.45, -7.9], [-0.9, 1.2, -4.95], 38),
   S11: K2('S11', [5.4, 5.8, -6.4], [-6, 0.8, -11], 46, [5.4, 5.8, -6.4], [5, 0.8, -11.5], 46),
   S12: K2('S12', [5.4, 5.8, -6.4], [0, 0.8, -11], 46),
-  S13: K2('S13', [6.1, 4.7, -5.7], [3.1, 4.55, -9.0], 36, [5.7, 4.6, -6.2], [3.1, 4.55, -9.0], 35),
+  S13: K2('S13', [1.2, 4.3, -11.6], [3.4, 4.3, -9.2], 40, [1.55, 4.32, -11.85], [3.4, 4.3, -9.2], 39),
   teaser: K2('teaser', [5.4, 5.8, -6.4], [0, 1.4, 45], 44),
 };
 
@@ -245,7 +248,7 @@ window.renderFrame = (f) => {
   }
   for (const [w, px, pz] of PICK) place(w, px, pz, 0.6);
   // boats back to their stranded base, then S8 may toss them
-  for (const b of ['boatA', 'boatB']) if (beach[b] && B0[b]) {
+  for (const b of ['boatB', 'boatC']) if (beach[b] && B0[b]) {
     beach[b].position.copy(B0[b].p); beach[b].rotation.set(B0[b].rx, B0[b].ry, B0[b].rz);
   }
   // ---- global props ----
@@ -369,11 +372,11 @@ window.renderFrame = (f) => {
         const k = ramp(f, a + d0, a + d0 + 95);
         if (k <= 0) return;
         beach[boat].position.y = B0[boat].p.y + Math.sin(smooth(k) * Math.PI) * h;
-        beach[boat].position.z = B0[boat].p.z - smooth(k) * dz;
+        beach[boat].position.z = B0[boat].p.z + smooth(k) * dz;
         beach[boat].rotation.z = B0[boat].rz + smooth(k) * rz;
         beach[boat].rotation.x = B0[boat].rx + Math.sin(k * 9) * 0.08 * (1 - k);
       };
-      toss('boatA', 105, 1.9, 7.5, 0.85);
+      toss('boatC', 105, 1.9, 7.5, 0.85);
       toss('boatB', 135, 1.4, 5.5, -0.6);
       const rc = ramp(f, a + 20, a + 190);
       place(wargaC, lerp(-8, -6, rc), lerp(29, 10, smooth(rc)), Math.PI);
@@ -387,15 +390,15 @@ window.renderFrame = (f) => {
       const walkIn = ramp(f, a, a + 18);
       const climb = ramp(f, a + 18, a + 175);
       if (walkIn < 1) {
-        place(codet, lerp(2.2, 3.15, smooth(walkIn)), lerp(-6.6, -8.35, smooth(walkIn)), 2.6);
+        place(codet, lerp(2.2, 3.5, smooth(walkIn)), lerp(-6.6, -8.15, smooth(walkIn)), 2.6);
         codet.setWalk((f - a) * 0.6);
       } else if (climb < 1) {
-        place(codet, 3.3, -8.55, 2.9);
+        place(codet, 3.65, -8.46, 2.9);
         codet.group.position.y = lerp(0, 3.95, smooth(climb));
         codet.setPose({ armL: 'hold', armR: 'hold' });
         codet.setWalk((f - a) * 0.22); // slow alternating grip steps
       } else {
-        place(codet, 3.6, -8.8, -2.2);
+        place(codet, 3.65, -8.46, -2.2);
         codet.group.position.y = 3.95;
         codet.setPose({ armL: 'hold', armR: 'down' });
       }
@@ -423,11 +426,11 @@ window.renderFrame = (f) => {
     }
     case 'S13': { // two faces on the branch: the whisper — "itu baru gelombang pertama"
       camK(CAMS.S13, f);
-      place(codet, 3.6, -8.8, -2.23);
+      place(codet, 3.85, -9.25, -1.85);
       codet.group.position.y = 3.95;
       codet.setPose({ armL: 'hold', armR: 'down' });
-      place(pakrt, 2.7, -9.5, 0.91);
-      pakrt.group.position.y = 3.8;
+      place(pakrt, 2.95, -9.15, 2.72);
+      pakrt.group.position.y = 3.93;
       const late = ramp(f, W.S13[0] + (W.S13[1] - W.S13[0]) * 0.55, W.S13[1] - 40);
       pakrt.setFace({ expr: 'scared', blink: blinkAt(f, 6), lip: (f % 8 < 4 ? 1 : 0), look: 0.2 });
       codet.setFace({ expr: late > 0.5 ? 'shocked' : 'scared', lip: 0, blink: blinkAt(f, 3), look: 0.45, headTilt: -3 });
@@ -458,6 +461,7 @@ window.renderFrame = (f) => {
 
   codet.update(t);
   busiti.update(t); pakrt.update(t);
+  if (S === 'S13') pakrt.group.position.y = 3.93; // villager update() resets y; the perch must win
   for (const w of ALLW) w.update(t);
   world.update(t, fx);
   renderer.render(scene, camera);
