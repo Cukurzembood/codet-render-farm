@@ -203,10 +203,12 @@ export function createWorld(scene) {
     for (let i = 0; i < 10; i++) { tx2.strokeStyle = '#97d873'; tx2.lineWidth = 4; const bx0 = 24 + rnd() * 80; tx2.beginPath(); tx2.moveTo(bx0, 54 + rnd() * 18); tx2.quadraticCurveTo(bx0 + (rnd() - 0.5) * 18, 30, bx0 + (rnd() - 0.5) * 34, 4 + rnd() * 22); tx2.stroke(); }
     const tuftTex = new THREE.CanvasTexture(tc); tuftTex.colorSpace = THREE.SRGBColorSpace;
     const tuftM = new THREE.MeshStandardMaterial({ map: tuftTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 1 });
+    const CLEAN = [[0.9, -4.6], [0.2, -4.3], [-1.2, -4.5], [-0.55, -5.55], [-1.75, -6.35], [-5.0, -8.0], [-5.6, -8.6], [3.15, -4.55], [5.65, -4.6], [4.35, -3.9], [2.7, -4.1], [5.0, -3.0], [-3.4, -1.6], [-8.2, -4.0], [4.4, -5.4], [-1.9, -6.8], [-0.75, -3.9], [2.7, -4.3], [3.75, -4.8], [4.0, -3.75], [5.25, -4.4], [3.55, -4.55], [-0.35, -5.95]];
     for (let i = 0; i < 230; i++) {
       const a = rnd() * Math.PI * 2, r = 1.6 + rnd() * 13;
       const px = Math.cos(a) * r, pz = -3 + Math.sin(a) * r * 0.7;
       if (Math.abs(px - 0.4) < 1.15 && pz > -1) continue;
+      if (CLEAN.some(([cx, cz]) => (px - cx) * (px - cx) + (pz - cz) * (pz - cz) < 0.36)) continue; // V3: no tufts on standing spots
       for (let k = 0; k < 2; k++) { const p = new THREE.Mesh(new THREE.PlaneGeometry(0.36 + rnd() * 0.3, 0.32 + rnd() * 0.3), tuftM); p.position.set(px, 0.17, pz); p.rotation.y = rnd() * Math.PI; g.add(p); }
     }
     for (let i = 0; i < 10; i++) {

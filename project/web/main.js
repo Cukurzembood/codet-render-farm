@@ -53,6 +53,17 @@ const ashPts = new THREE.Points(ashGeo, ashMat);
 ashPts.visible = false; ashPts.frustumCulled = false;
 scene.add(ashPts);
 
+// p12 glasses on the warung table (V3.4 re-direct: the sheet's macro shot — V3
+// shipped chickens here instead, the glasses beat never existed)
+const glassMat = new THREE.MeshStandardMaterial({ color: 0xcfe4ea, roughness: 0.12, metalness: 0.05, transparent: true, opacity: 0.6 });
+const glasses = [];
+for (const [gx, gz] of [[-1.62, -5.78], [-1.28, -5.92], [-0.94, -5.74]]) {
+  const g = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.036, 0.13, 10, 1, true), glassMat);
+  g.position.set(gx, 1.10, gz);
+  g.visible = false;
+  scene.add(g); glasses.push(g);
+}
+
 // ---------- timing (identical to the approved Ep.2 audio build) ----------
 const FPS = 30;
 const RAW = [8.67, 5.85, 9.74, 4.18, 5.37, 6.82, 5.65, 13.01, 5.29, 8.71, 7.27, 3.45, 11.60, 13.52]; // c1 c2 c3 c4 c5 c6 c7 c11 c12 c8 c13 c14 c9 c10
@@ -82,6 +93,12 @@ const W = {
 window.TOTAL = VO_END + 91;
 const LAMP_ON = Math.round(W.p8[0] + 0.68 * (W.p8[1] - W.p8[0]));
 const ORDER = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'p11', 'p12', 'p13', 'q5', 'q6', 'q7', 'q8', 'q9', 'p14', 'p15', 'p16', 'p17', 'p18', 'teaser'];
+// V3.6 PRO-EDIT FIX: chunk windows leave ~5-frame gaps (the VO inter-chunk pauses).
+// shotAt() used to fall back to 'teaser' inside those gaps — a 5-frame FLASH of the
+// beach teaser camera + cast between every pair of chunks. That is the subliminal
+// flicker that made the cuts feel rough ("potongan kasar"). Professional rule: a
+// shot HOLDS until the next shot starts. Extend every shot's end to the next start-1.
+for (let i = 0; i < ORDER.length - 1; i++) W[ORDER[i]][1] = W[ORDER[i + 1]][0] - 1;
 const LIGHT = { p1: 'pagiAbu', p2: 'pagiAbu', p3: 'pagiAbu', p4: 'gloom1', p5: 'gloom1', p6: 'gloom1', p7: 'gloom2', p8: 'gloom2', p9: 'gloom2', p10: 'gloom2', q1: 'gloom2', q2: 'gloom2', q3: 'gloom2', q4: 'gloom2', p11: 'gloom2', p12: 'gloom2', p13: 'gloom2', q5: 'gloom2', q6: 'gloom2', q7: 'gloom2', q8: 'gloom2', q9: 'gloom2', p14: 'gloom2', p15: 'gloom2', p16: 'gloom2', p17: 'gloom2', p18: 'gloom2', teaser: 'gloom2' };
 const shotAt = (f) => ORDER.find((id) => f >= W[id][0] && f <= W[id][1]) || 'teaser';
 
@@ -116,44 +133,50 @@ function place(obj, x, z, ry) { obj.group.position.x = x; obj.group.position.z =
 // camera keyframe pair over a shot window: linear drift (one move per shot)
 const K2 = (id, p0, l0, f0, p1, l1, f1) => ({ a: W[id][0], b: W[id][1], p0, l0, f0, p1: p1 || p0, l1: l1 || l0, f1: f1 === undefined ? f0 : f1 });
 function camK(km, f) {
-  const k = km.b > km.a ? (f - km.a) / (km.b - km.a) : 0;
+  // V3.6: ease the drift in/out (smoothstep) — a professional move starts and
+  // settles gently; the old linear drift lurched at every cut.
+  const k = smooth(km.b > km.a ? (f - km.a) / (km.b - km.a) : 0);
   setCam(lerp3(km.p0, km.p1, k), lerp3(km.l0, km.l1, k), lerp(km.f0, km.f1, k));
 }
 const SMOKE = { p1: 0.30, p2: 0.34, p3: 0.30, p4: 0.62, p5: 0.45, p6: 0.45, p7: 0.48, p8: 0.48, p9: 0.50, p10: 0.50, q1: 0.50, q2: 0.50, q3: 0.50, q4: 0.50, p11: 0.50, p12: 0.50, p13: 0.50, q5: 0.50, q6: 0.50, q7: 0.50, q8: 0.50, q9: 0.50, p14: 0.55, p15: 0.55, p16: 0.35, p17: 0.35, p18: 0.38, teaser: 0.40 };
 const ASH = { p5: [0.50, 0.4, -3.0], p6: [0.70, 0.4, -3.0], p7: [0.85, -0.6, -4.2], p8: [0.50, 0.2, -4.6], p9: [0.40, 0.4, -3.0], q1: [0.20, 4.6, -4.6], q2: [0.22, 4.6, -4.6], q3: [0.30, 4.6, -4.6], q4: [0.20, 4.6, -4.6], p10: [0.45, 0.2, -4.2], p11: [0.22, 0.4, -3.0], p13: [0.18, 4.6, -4.6], p18: [0.15, 0.6, 24.0] };
 const CODET = [0.9, -4.6], BUSITI = [-1.9, -6.8], SUMUR = [4.4, -5.4], PAKRT = [2.7, -4.1];
 
-// ---------- cameras (kampung shots keep the approved story.js framing;
-// sky shots aim at the 3D volcano [-46,·,-148]; beach shots use the 3D beach
-// geography: shore at z≈22, mud/boats z≈33, sea beyond +z) ----------
+// ---------- cameras (V3 RE-DIRECT per prod/ep2/BLOCKING.md — the V2 build copied the
+// old 2D story.js framings and the user rejected it: Bu Siti hidden behind the counter /
+// standing in the well, speakers shot from behind, near-identical cameras on p8/p10.
+// V3 rules: dialogue cameras sit within ±35° of the speaker's facing with the face
+// >= 1/4 frame height; nobody stands inside a prop footprint (well apron spots
+// S1 [3.15,-4.55], S2 [5.65,-4.6], S3 [4.35,-3.9]); consecutive shots differ by
+// >= 30° or >= 2x distance. Beach geography: shore z≈22, mud/boats z≈33, sea +z) ----------
 const CAMS = {
   p1: K2('p1', [10.5, 3.2, 16.5], [-7.5, 2.2, -15], 43, [9.4, 3.0, 13.5], [-5.5, 2.0, -13.5], 41),
   p2: K2('p2', [0, 6, -20], [-46, 34, -148], 36, [-2, 6.5, -22], [-47, 36, -148], 35),
-  p3: K2('p3', [4.6, 1.7, 1.8], [-16, 9, -90], 38, [4.5, 1.72, 1.6], [-16.5, 9.5, -92], 37),
+  p3: K2('p3', [4.85, 1.6, -1.35], [2.6, 1.2, -4.15], 38, [4.75, 1.62, -1.5], [2.6, 1.22, -4.15], 37),
   p4: K2('p4', [-2, 7, -30], [-46, 38, -148], 30, [-5, 8.5, -40], [-46, 42, -148], 29),
   p5: K2('p5', [2.2, 0.7, 1.8], [0.2, 1.6, -5.2], 42, [2.0, 0.75, 1.4], [0.2, 1.6, -5.2], 41),
   p6: K2('p6', [7.5, 3.4, 6.5], [-3, 2.2, -8], 40, [4.5, 2.2, 4.5], [0.6, 1.3, -5.2], 38),
-  p7: K2('p7', [1.8, 1.9, 0.5], [-1.6, 1.4, -6.4], 37, [1.6, 1.85, 0.1], [-1.6, 1.4, -6.4], 36),
-  p8: K2('p8', [2.35, 1.85, 2.3], [-0.3, 1.35, -6.2], 38, [2.3, 1.85, 1.9], [-0.3, 1.35, -6.2], 37),
+  p7: K2('p7', [-3.1, 1.7, -5.6], [-4.9, 1.15, -8.0], 38, [-3.25, 1.68, -5.75], [-4.9, 1.15, -8.0], 37),
+  p8: K2('p8', [1.9, 1.6, -2.7], [-0.5, 1.25, -6.1], 38, [1.85, 1.6, -2.85], [-0.5, 1.25, -6.1], 37),
   p9: K2('p9', [11.5, 3.6, 17.5], [-7.5, 2.0, -14], 44, [11.3, 3.55, 17.2], [-7.5, 2.0, -14], 44),
-  p10: K2('p10', [3.1, 1.9, 1.8], [-0.2, 1.35, -5.8], 38, [3.0, 1.9, 1.5], [-0.2, 1.35, -5.8], 37),
-  q1: K2('q1', [9.5, 3.0, 3.5], [4.4, 0.9, -5.4], 42, [9.0, 2.9, 3.0], [4.4, 0.9, -5.4], 41),
-  q2: K2('q2', [6.4, 1.5, -1.6], [4.4, 1.0, -5.4], 38, [6.2, 1.5, -1.9], [4.4, 1.0, -5.4], 37),
-  q3: K2('q3', [7.4, 1.6, -1.8], [4.1, 0.9, -5.2], 40, [7.2, 1.55, -2.1], [4.1, 0.9, -5.2], 40),
-  q4: K2('q4', [8.4, 2.3, 1.4], [3.9, 1.25, -4.8], 42, [8.2, 2.25, 1.1], [3.9, 1.25, -4.8], 41),
-  p11: K2('p11', [10.5, 3.2, 16.5], [-7.5, 2.2, -15], 43),
+  p10: K2('p10', [1.8, 1.6, -1.2], [-1.05, 1.2, -5.0], 40, [1.9, 1.6, -1.35], [-1.05, 1.2, -5.0], 39),
+  q1: K2('q1', [8.6, 2.2, 1.2], [4.2, 1.0, -5.0], 40, [8.4, 2.15, 1.0], [4.2, 1.0, -5.0], 39),
+  q2: K2('q2', [5.9, 1.35, -2.2], [4.4, 0.75, -5.35], 40, [5.8, 1.35, -2.35], [4.4, 0.75, -5.35], 39),
+  q3: K2('q3', [5.7, 1.55, -2.1], [3.8, 1.05, -4.85], 40, [5.6, 1.53, -2.25], [3.8, 1.05, -4.85], 39),
+  q4: K2('q4', [1.3, 1.6, -1.6], [3.75, 1.15, -4.2], 42, [1.4, 1.6, -1.75], [3.75, 1.15, -4.2], 41),
+  p11: K2('p11', [-12, 3.0, 10], [0, 1.5, -6], 42, [-11.6, 3.0, 9.6], [0, 1.5, -6], 42),
   p12: K2('p12', [5.4, 0.8, 0.6], [3.4, 0.35, -2.6], 40, [5.2, 0.8, 0.3], [3.4, 0.35, -2.6], 40),
-  p13: K2('p13', [9.8, 1.7, 0.8], [5.0, 0.9, -6.2], 38, [9.3, 1.65, 0.3], [5.0, 0.9, -6.2], 38),
-  q5: K2('q5', [6.5, 1.8, -0.9], [3.2, 1.3, -4.2], 38, [6.3, 1.8, -1.2], [3.2, 1.3, -4.2], 37),
-  q6: K2('q6', [8.6, 2.4, 1.6], [3.0, 1.2, -4.6], 40, [8.4, 2.35, 1.3], [3.0, 1.2, -4.6], 40),
+  p13: K2('p13', [8.6, 2.0, 0.6], [4.3, 1.0, -4.9], 40, [8.4, 1.95, 0.4], [4.3, 1.0, -4.9], 39),
+  q5: K2('q5', [2.6, 1.85, -0.1], [4.0, 1.2, -4.2], 44, [2.7, 1.83, -0.25], [4.0, 1.2, -4.2], 43),
+  q6: K2('q6', [5.3, 1.8, -2.2], [3.4, 1.1, -4.6], 40, [5.2, 1.78, -2.35], [3.4, 1.1, -4.6], 39),
   q7: K2('q7', [9.6, 3.0, 6.0], [2.0, 1.2, -5.0], 42, [9.4, 2.9, 5.7], [2.0, 1.2, -5.0], 42),
-  q8: K2('q8', [4.8, 1.6, -1.4], [2.7, 1.1, -4.1], 40, [4.7, 1.55, -1.6], [2.7, 1.1, -4.1], 40),
-  q9: K2('q9', [6.7, 1.7, -0.4], [5.0, 1.25, -3.0], 38, [6.6, 1.65, -0.7], [5.0, 1.25, -3.0], 38),
-  p14: K2('p14', [10.5, 3.2, 16.5], [-20, 10, -80], 42, [9.0, 3.4, 13.0], [-30, 16, -120], 40),
+  q8: K2('q8', [5.6, 1.35, -1.9], [4.3, 0.95, -3.9], 40, [5.5, 1.33, -2.0], [4.3, 0.95, -3.9], 39),
+  q9: K2('q9', [3.6, 1.6, -0.9], [4.95, 1.25, -3.0], 38, [3.7, 1.6, -1.05], [4.95, 1.25, -3.0], 37),
+  p14: K2('p14', [6, 1.2, 8], [-14, 7, -60], 44, [5.7, 1.25, 7.6], [-14, 7, -60], 43),
   p15: K2('p15', [2.3, 1.7, 0.9], [0.9, 1.4, -4.6], 34),
-  p17: K2('p17', [9.5, 3.4, 12.5], [-1.5, 0.3, 33], 44, [9.0, 3.2, 13], [-1.5, 0.3, 33], 43),
-  p18: K2('p18', [4.6, 1.8, 26.2], [0.4, 1.2, 24.2], 36, [4.5, 1.75, 26.0], [0.4, 1.2, 24.2], 35),
-  teaser: K2('teaser', [9.5, 3.4, 12.5], [-1.5, 0.3, 34], 43),
+  p17: K2('p17', [1.9, 1.7, 19.2], [-0.6, 0.5, 34], 44, [1.85, 1.68, 19.5], [-0.6, 0.5, 34], 43),
+  p18: K2('p18', [2.1, 1.65, 28.4], [0.55, 1.3, 24.35], 36, [2.0, 1.63, 28.2], [0.55, 1.3, 24.35], 35),
+  teaser: K2('teaser', [1.9, 1.7, 19.2], [-0.6, 0.5, 34], 43),
 };
 const CH_HOME = [[2.4, -2.4], [3.6, -3.2], [1.8, -1.8], [4.8, -2.0]];
 function chickensIdle(f) {
@@ -173,7 +196,7 @@ window.renderFrame = (f) => {
   // defaults each frame
   codet.setWalk(null); codet.setPose({ armL: 'down', armR: 'down' });
   place(codet, CODET[0], CODET[1], 0.15); codet.group.position.y = 0;
-  place(busiti, -3.15, -6.15, 1.15);
+  place(busiti, -1.75, -6.35, 0.22); // V3: behind the counter, close to it (was -3.15,-6.15: hidden)
   place(pakrt, PAKRT[0], PAKRT[1], -0.3);
   place(wargaA, -3.4, -1.6, Math.PI / 2); wargaA.setWalk(null);
   place(wargaB, -8.2, -4.0, 0.5); wargaB.setWalk(null);
@@ -181,6 +204,12 @@ window.renderFrame = (f) => {
   pakrt.setFace({ expr: 'neutral', blink: blinkAt(f, 6), lip: 0 });
   wargaA.setFace({ expr: 'neutral', blink: blinkAt(f, 11), lip: 0 });
   wargaB.setFace({ expr: 'neutral', blink: blinkAt(f, 14), lip: 0 });
+  // V3.2: reset ALL warga arms every frame — without this, p7's raised arm stayed
+  // up through p8..q5 (state carryover: Bu Siti stood one arm raised for 40 s)
+  busiti.setArm(1, 'down'); busiti.setArm(-1, 'down');
+  pakrt.setArm(1, 'down'); pakrt.setArm(-1, 'down');
+  wargaA.setArm(1, 'down'); wargaA.setArm(-1, 'down');
+  wargaB.setArm(1, 'down'); wargaB.setArm(-1, 'down');
   codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.3, headTilt: 0, headPitch: 0 });
   chickensIdle(f);
   // ash cloud follows the shot table
@@ -211,7 +240,7 @@ window.renderFrame = (f) => {
       break;
     case 'p3': // PAK RT dialogue, over his shoulder, looking up (lipsync c2)
       camK(CAMS.p3, f);
-      place(pakrt, PAKRT[0], PAKRT[1], -0.35);
+      place(pakrt, 2.7, -4.3, 0.5); // V3.3: feet ON the dirt band (V3.2 still landed on the grass strip south of it)
       pakrt.setFace({ expr: 'talk', blink: blinkAt(f, 6), lip: lipV('p3', f), look: -0.2, headTilt: -8 + 1.5 * Math.sin(f * 0.1) });
       codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.35, headTilt: -6, headPitch: -10 });
       break;
@@ -229,22 +258,24 @@ window.renderFrame = (f) => {
       codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0, headTilt: 3 });
       busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
       break;
-    case 'p7': { // BU SITI dialogue at the warung (lipsync c5); Codet hurries in to help
+    case 'p7': { // BU SITI dialogue at the LAUNDRY LINE (lipsync c5): ash on the clothes is the proof; Codet hurries in to help
       camK(CAMS.p7, f);
-      place(busiti, BUSITI[0], BUSITI[1], 0.9);
+      place(busiti, -5.0, -8.0, 0.65); // V3.3: RESTORED V3 (full face at the line) — V3.1/V3.2 experiments (back view / cropped) were worse
+      busiti.setArm(-1, 'up'); // free hand holds the line/cloth; bucket arm stays down
       busiti.setFace({ expr: 'talk', blink: blinkAt(f, 8), lip: lipV('p7', f), headTilt: 3.5 * Math.sin(f * 0.16) });
-      const wIn = ramp(f, W.p7[0] + 0.55 * (W.p7[1] - W.p7[0]), W.p7[1]);
-      const wx = lerp(3.6, 2.2, smooth(wIn));
-      place(codet, wx, -3.2, -Math.PI / 2 + 0.3);
+      const wIn = ramp(f, W.p7[0] + 0.30 * (W.p7[1] - W.p7[0]), W.p7[1]);
+      const wx = lerp(-1.6, -3.55, smooth(wIn)), wz = lerp(-6.0, -7.35, smooth(wIn));
+      place(codet, wx, wz, -2.0);
       if (wIn > 0 && wIn < 1) codet.setWalk((f - W.p7[0]) * 0.30);
       codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: -0.3 });
       break;
     }
-    case 'p8': // close-up: Bu Siti reaches up and clicks the warung lamp on at 10 AM
+    case 'p8': // Bu Siti OUTSIDE at the warung corner post clicks the lamp on at 10 AM; Codet watches from the path
       camK(CAMS.p8, f);
-      place(busiti, -2.9, -6.0, 0.9);
+      place(busiti, -0.35, -5.95, 0.9); // V3.1: right at the front post — her raised hand reaches the lamp switch
       busiti.setArm(1, f >= LAMP_ON ? 'down' : 'up');
       busiti.setFace({ expr: f >= LAMP_ON ? 'worry' : 'neutral', blink: blinkAt(f, 8), lip: 0, look: 0.1 });
+      place(codet, -1.2, -4.5, 2.6);
       codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: -0.25 });
       break;
     case 'p9': // wide: midday dark as night, one warm lamp in the gloom
@@ -252,48 +283,51 @@ window.renderFrame = (f) => {
       busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
       wargaB.setFace({ expr: 'nervous', blink: blinkAt(f, 14), lip: 0 });
       break;
-    case 'p10': { // two-shot at the warung: Codet asks (lipsync c7); Bu Siti has no answer
+    case 'p10': { // TRUE two-shot in front of the warung: Codet asks (lipsync c7); Bu Siti has no answer
       camK(CAMS.p10, f);
+      place(codet, 0.2, -4.3, -0.35); // V3.2: body 3/4 to her + gaze on her (V3.1 still addressed the camera)
+      place(busiti, -0.75, -3.9, 0.9);
       const late = ramp(f, W.p10[0] + 0.75 * (W.p10[1] - W.p10[0]), W.p10[1]);
-      codet.setFace({ expr: late > 0.5 ? 'scared' : 'think', lip: lipAt('p10', f), blink: blinkAt(f, 3), look: -0.25 });
+      codet.setFace({ expr: late > 0.5 ? 'scared' : 'think', lip: lipAt('p10', f), blink: blinkAt(f, 3), look: -0.4 });
       busiti.setFace({ expr: late > 0.5 ? 'shock' : 'worry', blink: blinkAt(f, 8), lip: 0 });
       break;
     }
-    case 'q1': // the well crowd: everyone gathered, one villager drawing water
+    case 'q1': // the well crowd ON THE APRON (V2 put Bu Siti inside the well barrel): everyone frozen, chickens silent
       camK(CAMS.q1, f);
-      place(busiti, SUMUR[0], SUMUR[1], 0.8);
+      place(busiti, 3.15, -4.55, 0.8);
       busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
-      place(wargaA, 5.9, -4.3, -0.6); wargaA.setWalk(0.3);
+      place(wargaA, 5.65, -4.6, -0.6); wargaA.setArm(1, 'up'); // holding the draw rope, motionless
       wargaA.setFace({ expr: 'nervous', blink: blinkAt(f, 11), lip: 0 });
-      place(codet, 6.9, -3.2, -0.5);
+      place(codet, 4.35, -3.9, 0.2);
       codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.3 });
       break;
     case 'q2': // the draw: the bucket comes up, the villager holds the dipper a long time
       camK(CAMS.q2, f);
-      place(wargaA, 5.2, -4.6, -0.4);
+      place(wargaA, 5.65, -4.6, -0.4);
       wargaA.setArm(1, 'up');
       wargaA.setFace({ expr: 'nervous', blink: blinkAt(f, 11), lip: 0, look: 0.2, headTilt: -6 + 1.5 * Math.sin(f * 0.08) });
-      place(busiti, SUMUR[0], SUMUR[1], 0.8);
+      place(busiti, 3.15, -4.55, 0.8);
       busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
       codet.group.visible = false;
       break;
-    case 'q3': // the water is warm — Codet sniffs the sulphur in the air
+    case 'q3': // the water is warm — Codet touches the well water, steam rises
       camK(CAMS.q3, f);
-      place(codet, 4.0, -4.9, 0.4);
-      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.3, headTilt: -4, headPitch: 6 });
-      place(busiti, SUMUR[0], SUMUR[1], 0.8);
+      place(codet, 3.75, -4.8, 1.5); // V3.2: turned INTO the well (V3.1 faced the audience, not the water)
+      codet.setPose({ armR: 'hold' }); // V3.1: forearm up, just dipped in the water
+      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.3, headTilt: -4, headPitch: 14 }); // V3.1: leans IN over the rim
+      place(busiti, 3.15, -4.55, 0.8);
       busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
       fx.wellWarm = true;
       break;
-    case 'q4': // BU SITI dialogue at the well (lipsync c12); Pak RT listens
+    case 'q4': // BU SITI dialogue BESIDE the well (lipsync c12); Pak RT listens
       camK(CAMS.q4, f);
-      place(busiti, SUMUR[0], SUMUR[1], 0.8);
-      busiti.setFace({ expr: 'talk', blink: blinkAt(f, 8), lip: lipV('q4', f), headTilt: 3 * Math.sin(f * 0.14) });
-      place(pakrt, 3.4, -4.2, 0.5);
+      place(busiti, 3.15, -4.55, 0.35); // V3.1: angled toward Pak RT, gaze on him — not addressing the camera
+      busiti.setFace({ expr: 'talk', blink: blinkAt(f, 8), lip: lipV('q4', f), look: 0.3, headTilt: 3 * Math.sin(f * 0.14) });
+      place(pakrt, 4.0, -3.75, -1.9); // V3.3: V3.1's in-frame spot + face cheated 23 deg toward camera (V3.2 moved him OUT of frame)
       pakrt.setFace({ expr: 'worry', blink: blinkAt(f, 6), lip: 0, look: 0.25, headTilt: -6 });
       codet.group.visible = false;
       break;
-    case 'p11': // no one answers: the whole kampung frozen mid-breath
+    case 'p11': // V3.5: "Tidak ada yang jawab" — WEST wide (new angle, not p1's), the whole kampung frozen mid-breath. NO shake: the tremor has not come yet
       camK(CAMS.p11, f);
       codet.setPose({ armL: 'hold', armR: 'hold' });
       codet.setFace({ expr: 'think', lip: 0, blink: 0, look: 0.2, headTilt: -6 });
@@ -302,25 +336,27 @@ window.renderFrame = (f) => {
       wargaA.setWalk(0.35 * Math.PI * 2); // frozen mid-stride
       wargaA.setFace({ expr: 'nervous', blink: 0, lip: 0, look: 0.4 });
       break;
-    case 'p12': // the chickens, silent and alert for the first time ever
+    case 'p12': // V3.5: "Ayam-ayam diam total" — the chickens, silent and alert for the first time ever
       camK(CAMS.p12, f);
       chickens.forEach((ch, i) => {
         ch.group.position.set(CH_HOME[i][0], 0, CH_HOME[i][1]);
         ch.group.rotation.y = i * 1.7;
         ch.update(t, { step: [0.2, 0.55, 0.8, 0.35][i], flap: 0, run: 0, peck: 0 });
       });
-      codet.group.visible = false; busiti.group.visible = false;
       break;
-    case 'p13': // the well: yesterday muddy, today warm
+    case 'p13': // V3.5: "Sumur yang kemarin keruh, sekarang airnya hangat" — the well again, wider; warm water between them
       camK(CAMS.p13, f);
-      place(busiti, SUMUR[0], SUMUR[1], 0.8);
+      place(busiti, 3.15, -4.55, 0.8);
       busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
-      place(codet, 6.8, -3.4, -0.5);
+      place(codet, 4.35, -3.9, 0.3);
       codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.3 });
       fx.wellWarm = true;
       break;
-    case 'q5': // PAK RT dialogue: calming the crowd (lipsync c13, part 1)
+    case 'q5': // PAK RT dialogue: calming the crowd at the well apron (lipsync c13, part 1)
       camK(CAMS.q5, f);
+      place(pakrt, 4.35, -3.9, -0.3);
+      place(busiti, 3.55, -4.55, 0.8); // V3.1: crowd pulled IN around Pak RT so the frame holds all three
+      place(wargaA, 5.25, -4.4, -0.5); // V3.3: clear of Pak RT's shoulder (V3.2 hid him behind Pak RT)
       pakrt.setArm(-1, 'up'); pakrt.setArm(1, 'up');
       pakrt.setFace({ expr: 'talk', blink: blinkAt(f, 6), lip: lipV('q5', f), look: 0, headTilt: -4 });
       busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
@@ -328,6 +364,9 @@ window.renderFrame = (f) => {
       break;
     case 'q6': // "mungkin cuma cuaca" — the villagers look at each other (lipsync c13, part 2)
       camK(CAMS.q6, f);
+      place(pakrt, 4.35, -3.9, -0.3);
+      place(wargaA, 5.65, -4.6, -0.6);
+      place(wargaB, 6.3, -4.9, -0.9);
       pakrt.setFace({ expr: 'talk', blink: blinkAt(f, 6), lip: lipV('q5', f, W.q5[0]), look: 0, headTilt: -4 });
       wargaA.setFace({ expr: 'nervous', blink: blinkAt(f, 11), lip: 0, look: 0.4 });
       wargaB.setFace({ expr: 'nervous', blink: blinkAt(f, 14), lip: 0, look: -0.3 });
@@ -335,43 +374,60 @@ window.renderFrame = (f) => {
       break;
     case 'q7': // "Semua pulang ke rumah masing-masing" — nobody moves
       camK(CAMS.q7, f);
+      place(pakrt, 4.35, -3.9, -0.3);
+      place(busiti, 3.15, -4.55, 0.8);
+      place(wargaA, 5.65, -4.6, -0.6);
+      place(wargaB, 6.3, -4.9, -0.9);
       pakrt.setFace({ expr: 'worry', blink: 0, lip: 0, look: 0.3, headTilt: -4 });
       busiti.setFace({ expr: 'worry', blink: 0, lip: 0 });
       wargaA.setFace({ expr: 'nervous', blink: 0, lip: 0, look: 0.4 });
       wargaB.setFace({ expr: 'nervous', blink: 0, lip: 0, look: -0.3 });
       codet.group.visible = false;
       break;
-    case 'q8': // close-up: Pak RT's hands tremble as he speaks
+    case 'q8': // V3.5: "Tapi Codet lihat tangan Pak RT gemetar" — close-up: Pak RT's hands tremble as he speaks
       camK(CAMS.q8, f);
-      pakrt.group.position.x = PAKRT[0] + 0.012 * Math.sin(f * 0.9);
+      place(pakrt, 4.35, -3.9, -0.3);
+      pakrt.group.position.x = 4.35 + 0.012 * Math.sin(f * 0.9);
       pakrt.group.position.y = 0.008 * Math.sin(f * 1.13);
       pakrt.setFace({ expr: 'shock', blink: blinkAt(f, 6), lip: 0, look: 0.2, headTilt: -6 });
-      codet.group.visible = false; busiti.group.visible = false;
       break;
-    case 'q9': // cut to Codet: he notices the trembling hands
+    case 'q9': // V3.5: cut to Codet: he notices the trembling hands
       camK(CAMS.q9, f);
-      place(codet, 5.0, -3.0, -0.6);
-      codet.setFace({ expr: 'shocked', lip: 0, blink: blinkAt(f, 3), look: 0.4, headTilt: -3 });
-      busiti.group.visible = false; pakrt.group.visible = false;
+      place(codet, 5.0, -3.0, -0.9);
+      codet.setFace({ expr: 'shocked', lip: 0, blink: blinkAt(f, 3), look: 0.45, headTilt: -3 });
       break;
-    case 'p14': { // the sound returns — bigger, closer; everyone looks up
+    case 'p14': { // V3.5: "Terus suara itu datang lagi — lebih besar, lebih dekat" — west wide, everyone looks up; the tremor heralds the booms at the tail
       camK(CAMS.p14, f);
-      if (f > W.p14[1] - 0.2 * (W.p14[1] - W.p14[0])) { // a tremor heralds it
-        camera.position.x += 0.018 * Math.sin(f * 2.1);
-        camera.position.y += 0.011 * Math.sin(f * 2.9);
-      }
       codet.setFace({ expr: 'scared', lip: 0, blink: blinkAt(f, 3), look: 0, headTilt: -8, headPitch: -12 });
       busiti.setFace({ expr: 'shock', blink: blinkAt(f, 8), lip: 0 });
       wargaB.setFace({ expr: 'shock', blink: blinkAt(f, 14), lip: 0 });
+      if (f > W.p14[1] - 0.2 * (W.p14[1] - W.p14[0])) {
+        camera.position.x += 0.018 * Math.sin(f * 2.1);
+        camera.position.y += 0.011 * Math.sin(f * 2.9);
+      }
       break;
     }
-    case 'p15': { // glasses ping, the ground shakes — a deep shudder, stronger than Ep.1
+    case 'p15': { // V3.5: "Gelas berdenting, tanah bergetar, dada ikut bergetar" — 1.4 s glasses INSERT, then Codet CU in the shudder
+      if (f < W.p15[0] + 42) {
+        setCam([-0.7, 1.22, -4.95], [-1.3, 1.06, -5.85], 36);
+        glasses.forEach((g, i) => {
+          g.visible = true;
+          g.rotation.z = 0.055 * Math.sin(f * 7 + i * 1.7);
+          g.position.x += 0.0035 * Math.sin(f * 9 + i * 2.3);
+        });
+        place(busiti, -2.1, -6.3, 0.3);
+        busiti.setArm(1, 'up');
+        busiti.setFace({ expr: 'shock', blink: blinkAt(f, 8), lip: 0 });
+        codet.group.visible = false;
+        break;
+      }
       camK(CAMS.p15, f);
-      if (f >= W.p15[0] + 8) {
-        const d = f - W.p15[0] - 8, amp = 0.085 * Math.exp(-d / 26);
+      if (f >= W.p15[0] + 50) {
+        const d = f - W.p15[0] - 50, amp = 0.085 * Math.exp(-d / 30);
         camera.position.x += amp * Math.sin(f * 1.9);
         camera.position.y += amp * 0.7 * Math.sin(f * 2.6 + 1);
       }
+      codet.group.position.y = 0.012 * Math.sin(f * 0.55); // fast shallow breathing — his chest shakes with the ground
       codet.setFace({ expr: 'scared', lip: 0, blink: blinkAt(f, 3), look: 0.1, headTilt: -3 });
       busiti.setFace({ expr: 'shock', blink: blinkAt(f, 8), lip: 0 });
       fx.burst = ramp(f, W.p15[0], W.p15[0] + 0.4 * (W.p15[1] - W.p15[0]));
@@ -384,7 +440,7 @@ window.renderFrame = (f) => {
       codet.setFacing(-0.12);
       codet.setWalk((f - W.p16[0]) * 0.85);
       codet.setFace({ expr: 'scared', lip: 0, blink: blinkAt(f, 3), look: 0.3, headTilt: 3 });
-      setCam([cx + 5.2, 1.9, cz + 1.2], [cx, 1.05, cz], 40);
+      setCam([cx + 4.4, 1.9, cz + 4.6], [cx, 1.05, cz], 40); // V3: front-side tracking — his face reads while he runs (V2 filmed his side/back)
       busiti.group.visible = false; pakrt.group.visible = false;
       break;
     }
@@ -412,7 +468,7 @@ window.renderFrame = (f) => {
       break;
   }
   // cast per shot (from the approved story.js actor map) — applied every frame
-  const CAST = { p1: ['codet', 'busiti', 'wargaB'], p2: [], p3: ['pakrt', 'codet'], p4: [], p5: ['codet', 'busiti'], p6: ['codet', 'busiti'], p7: ['busiti', 'codet'], p8: ['busiti', 'codet'], p9: ['codet', 'busiti', 'wargaB'], p10: ['codet', 'busiti'], q1: ['busiti', 'wargaA', 'codet'], q2: ['wargaA', 'busiti'], q3: ['codet', 'busiti'], q4: ['busiti', 'pakrt'], p11: ['codet', 'busiti', 'wargaB', 'wargaA'], p12: [], p13: ['busiti', 'codet'], q5: ['pakrt', 'busiti', 'wargaA'], q6: ['pakrt', 'wargaA', 'wargaB'], q7: ['pakrt', 'busiti', 'wargaA', 'wargaB'], q8: ['pakrt'], q9: ['codet'], p14: ['codet', 'busiti', 'wargaB'], p15: ['codet', 'busiti'], p16: ['codet'], p17: ['codet'], p18: ['codet'], teaser: ['codet'] };
+  const CAST = { p1: ['codet', 'busiti', 'wargaB'], p2: [], p3: ['pakrt'], p4: [], p5: ['codet', 'busiti'], p6: ['codet', 'busiti'], p7: ['busiti', 'codet'], p8: ['busiti', 'codet'], p9: ['codet', 'busiti', 'wargaB'], p10: ['codet', 'busiti'], q1: ['busiti', 'wargaA', 'codet'], q2: ['wargaA', 'busiti'], q3: ['codet'], q4: ['busiti', 'pakrt'], p11: ['codet', 'busiti', 'wargaB', 'wargaA'], p12: [], p13: ['busiti', 'codet'], q5: ['pakrt', 'busiti', 'wargaA'], q6: ['pakrt', 'wargaA', 'wargaB'], q7: ['pakrt', 'busiti', 'wargaA', 'wargaB'], q8: ['pakrt'], q9: ['codet'], p14: ['codet', 'busiti', 'wargaB'], p15: ['codet', 'busiti'], p16: ['codet'], p17: ['codet'], p18: ['codet'], teaser: ['codet'] };
   const cast = CAST[S] || [];
   codet.group.visible = cast.includes('codet');
   busiti.group.visible = cast.includes('busiti');

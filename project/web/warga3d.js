@@ -62,7 +62,8 @@ export function createVillager(variant) {
   const headG = new THREE.Group(); headG.position.set(0, 1.02, 0); group.add(headG);
   const skull = new THREE.Mesh(new THREE.SphereGeometry(0.215, 24, 18), flat(V.skin));
   skull.scale.set(1, 0.95, 0.96); skull.castShadow = true; headG.add(skull);
-  const F = (m, x, y, z) => { m.position.set(x, y, z); headG.add(m); return m; };
+  const faceParts = [];
+  const F = (m, x, y, z) => { m.position.set(x, y, z); headG.add(m); faceParts.push(m); return m; };
   if (V.head === 'hijab') {
     const hj = new THREE.Mesh(new THREE.SphereGeometry(0.235, 20, 16), flat(V.headCol));
     hj.scale.set(1.02, 1.0, 1.0); hj.position.set(0, 0.035, -0.028); headG.add(hj);
@@ -91,13 +92,16 @@ export function createVillager(variant) {
   for (const s of [-1, 1]) brows[s] = F(new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.016, 0.01), mouthM), s * 0.076, 0.088, 0.20);
   F(new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 8), flat(V.skin)), 0, -0.018, 0.208);
   const mouths = {};
-  const mk = (name, mesh, x, y, z) => { mesh.position.set(x, y, z); mesh.visible = false; headG.add(mesh); mouths[name] = mesh; };
+  const mk = (name, mesh, x, y, z) => { mesh.position.set(x, y, z); mesh.visible = false; headG.add(mesh); mouths[name] = mesh; faceParts.push(mesh); };
   const smile = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.009, 8, 20, Math.PI * 0.9), mouthM); smile.rotation.z = Math.PI * 1.05; mk('smile', smile, 0, -0.072, 0.20);
   const flatM = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.009, 0.008), mouthM); mk('flat', flatM, 0, -0.078, 0.205);
   const oM = new THREE.Mesh(new THREE.CircleGeometry(0.018, 14), flat('#5a1e28')); oM.scale.set(1, 1.2, 1); mk('o', oM, 0, -0.082, 0.208);
   const t1 = new THREE.Mesh(new THREE.CircleGeometry(0.016, 14), flat('#5a1e28')); t1.scale.set(1, 0.7, 1); mk('talk1', t1, 0, -0.078, 0.208);
   const t2 = new THREE.Mesh(new THREE.CircleGeometry(0.024, 14), flat('#5a1e28')); mk('talk2', t2, 0, -0.082, 0.206);
   const grin = new THREE.Mesh(new THREE.CircleGeometry(0.030, 14), flat('#5a1e28')); grin.scale.set(1, 0.65, 1); mk('grin', grin, 0, -0.074, 0.204);
+  // V3 FIX: the hijab skull is pushed +0.045 forward, which buried every face part
+  // inside the skull (Bu Siti rendered faceless). Push her face parts out by the same offset.
+  if (V.head === 'hijab') for (const m of faceParts) m.position.z += 0.048;
 
   const EXPR = {
     neutral: { brow: 0.05, browY: 0.088, mouth: 'smile' },
