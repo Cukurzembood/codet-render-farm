@@ -74,32 +74,44 @@ export function mossy(c0, seed = 5, amt = 1) {
 }
 export function grass(seed = 6) {
   const [c, g] = cv(512, 512), r = rng(seed);
-  g.fillStyle = '#6fa04a'; g.fillRect(0, 0, 512, 512);
-  for (let i = 0; i < 90; i++) { g.fillStyle = hsl(85 + r() * 20, 42, 38 + r() * 14, .5); g.beginPath(); g.ellipse(r() * 512, r() * 512, 20 + r() * 50, 12 + r() * 30, r() * 3, 0, 7); g.fill(); }
-  for (let i = 0; i < 1400; i++) { const x = r() * 512, y = r() * 512; g.strokeStyle = hsl(80 + r() * 30, 45, 30 + r() * 25, .9); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + r() * 4 - 2, y - 5 - r() * 7); g.stroke(); }
-  for (let i = 0; i < 30; i++) { g.fillStyle = ['#f3e27a', '#ffffff', '#e8a0c0'][i % 3]; g.beginPath(); g.arc(r() * 512, r() * 512, 2.5, 0, 7); g.fill(); }
+  g.fillStyle = '#679a44'; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 120; i++) { g.fillStyle = hsl(78 + r() * 26, 40, 34 + r() * 16, .45); g.beginPath(); g.ellipse(r() * 512, r() * 512, 24 + r() * 60, 14 + r() * 36, r() * 3, 0, 7); g.fill(); }
+  for (let i = 0; i < 26; i++) { g.fillStyle = hsl(45, 32, 44 + r() * 10, .35); g.beginPath(); g.ellipse(r() * 512, r() * 512, 8 + r() * 22, 5 + r() * 12, r() * 3, 0, 7); g.fill(); }
+  for (let i = 0; i < 3200; i++) { const x = r() * 512, y = r() * 512; g.strokeStyle = hsl(78 + r() * 34, 46, 27 + r() * 28, .9); g.lineWidth = 1.4; g.beginPath(); g.moveTo(x, y); g.lineTo(x + r() * 5 - 2.5, y - 6 - r() * 8); g.stroke(); }
+  for (let i = 0; i < 18; i++) { g.fillStyle = ['#f3e27a', '#ffffff', '#e8a0c0'][i % 3]; g.beginPath(); g.arc(r() * 512, r() * 512, 2.2, 0, 7); g.fill(); }
   return c;
 }
 export function dirt(seed = 7) {
   const [c, g] = cv(512, 512), r = rng(seed);
-  g.fillStyle = '#a88a62'; g.fillRect(0, 0, 512, 512);
-  for (let i = 0; i < 300; i++) { g.fillStyle = hsl(30 + r() * 10, 25, 40 + r() * 25, .6); g.beginPath(); g.ellipse(r() * 512, r() * 512, 3 + r() * 14, 2 + r() * 8, r() * 3, 0, 7); g.fill(); }
+  g.fillStyle = '#a5855c'; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 380; i++) { g.fillStyle = hsl(30 + r() * 12, 24, 38 + r() * 26, .55); g.beginPath(); g.ellipse(r() * 512, r() * 512, 3 + r() * 16, 2 + r() * 9, r() * 3, 0, 7); g.fill(); }
+  for (const rx of [150, 340]) { const gr = g.createLinearGradient(rx - 34, 0, rx + 34, 0); gr.addColorStop(0, 'rgba(70,50,30,0)'); gr.addColorStop(0.5, 'rgba(70,50,30,.28)'); gr.addColorStop(1, 'rgba(70,50,30,0)'); g.fillStyle = gr; g.fillRect(rx - 34, 0, 68, 512); }
+  for (let i = 0; i < 240; i++) { const x = r() * 512, y = r() * 512, L = 52 + r() * 22; g.fillStyle = hsl(35, 10, L, .9); g.beginPath(); g.ellipse(x, y, 1.5 + r() * 3.5, 1 + r() * 2.2, r() * 3, 0, 7); g.fill(); g.fillStyle = 'rgba(255,240,210,.5)'; g.fillRect(x - 1, y - 1.6, 2.4, 1.1); }
+  for (let i = 0; i < 60; i++) { const x = r() * 512, y = r() * 512; g.strokeStyle = hsl(85, 40, 32 + r() * 12, .8); g.lineWidth = 1.3; g.beginPath(); g.moveTo(x, y); g.lineTo(x + r() * 4 - 2, y - 4 - r() * 5); g.stroke(); }
   return c;
 }
 export function plaster(seed = 8, hue = 40) {
-  const [c, g] = cv(256, 256), r = rng(seed);
-  g.fillStyle = hsl(hue, 40, 86); g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 40; i++) { g.fillStyle = hsl(hue, 30, 76 + r() * 8, .5); g.beginPath(); g.ellipse(r() * 256, r() * 256, 10 + r() * 30, 6 + r() * 16, 0, 0, 7); g.fill(); }
-  g.fillStyle = hsl(hue, 20, 60, .5); g.fillRect(0, 236, 256, 20);
+  const [c, g] = cv(512, 512), r = rng(seed);
+  g.fillStyle = hsl(hue, 38, 84); g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 90; i++) { g.fillStyle = hsl(hue + r() * 8 - 4, 30, 72 + r() * 12, .4); g.beginPath(); g.ellipse(r() * 512, r() * 512, 14 + r() * 44, 9 + r() * 26, r() * 3, 0, 7); g.fill(); }
+  for (let i = 0; i < 2600; i++) { g.fillStyle = hsl(hue, 18, 62 + r() * 26, .25); g.fillRect(r() * 512, r() * 512, 1.6, 1.6); }
+  for (let i = 0; i < 7; i++) { let x = r() * 512, y = r() * 200; g.strokeStyle = 'rgba(90,75,60,.55)'; g.lineWidth = 1.1; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 6; k++) { x += r() * 16 - 8; y += 14 + r() * 22; g.lineTo(x, y); } g.stroke(); }
+  for (let i = 0; i < 9; i++) { const x = r() * 512; const gr = g.createLinearGradient(0, 0, 0, 190); gr.addColorStop(0, 'rgba(105,88,66,.30)'); gr.addColorStop(1, 'rgba(105,88,66,0)'); g.fillStyle = gr; g.fillRect(x, 0, 5 + r() * 10, 190); }
+  const gr2 = g.createLinearGradient(0, 400, 0, 512); gr2.addColorStop(0, 'rgba(80,64,46,0)'); gr2.addColorStop(1, 'rgba(80,64,46,.5)'); g.fillStyle = gr2; g.fillRect(0, 400, 512, 112);
   return c;
 }
 export function roof(seed = 9) {
-  const [c, g] = cv(256, 256), r = rng(seed);
-  g.fillStyle = '#7b2e1c'; g.fillRect(0, 0, 256, 256);
-  for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) {
-    const x = col * 32 + (row % 2) * 16, y = row * 32; g.fillStyle = hsl(12 + r() * 8, 58, 42 + r() * 10);
-    g.beginPath(); g.ellipse(x + 16, y + 16, 14, 17, 0, 0, Math.PI); g.lineTo(x + 2, y); g.fill();
-    g.fillStyle = 'rgba(255,220,180,.25)'; g.fillRect(x + 6, y + 2, 5, 22);
+  const [c, g] = cv(512, 512), r = rng(seed);
+  g.fillStyle = '#4a2015'; g.fillRect(0, 0, 512, 512);
+  const tw = 42, th = 46;
+  for (let row = 0; row * th < 512 + th; row++) for (let col = -1; col * tw < 512 + tw; col++) {
+    const x = col * tw + (row % 2) * tw / 2, y = row * th, L = 34 + r() * 13, H = 11 + r() * 9;
+    const gr = g.createLinearGradient(0, y, 0, y + th);
+    gr.addColorStop(0, hsl(H, 52, L + 11)); gr.addColorStop(0.55, hsl(H, 56, L)); gr.addColorStop(1, hsl(H, 58, L - 13));
+    g.fillStyle = gr; g.beginPath(); g.roundRect(x + 2, y + 1, tw - 4, th + 8, 9); g.fill();
+    g.fillStyle = 'rgba(255,225,190,.28)'; g.fillRect(x + 7, y + 4, 4, th - 6);
+    if (r() < 0.14) { g.fillStyle = hsl(95, 32, 26 + r() * 8, .75); g.beginPath(); g.ellipse(x + r() * tw, y + r() * th, 5 + r() * 8, 3 + r() * 5, 0, 0, 7); g.fill(); }
+    if (r() < 0.10) { g.fillStyle = 'rgba(30,16,10,.5)'; g.beginPath(); g.ellipse(x + r() * tw, y + r() * th, 6 + r() * 9, 4 + r() * 6, 0, 0, 7); g.fill(); }
   }
   return c;
 }

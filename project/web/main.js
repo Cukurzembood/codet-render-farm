@@ -118,6 +118,10 @@ add(tbox(7.0, 0.08, 0.9, 2), M.plank, 0, 1.36, 1.15, warung);      // counter to
 add(tbox(6.8, 1.5, 0.5, 2), M.plank, 0, 0.75, -1.7, warung);       // back shelf
 for (let i = 0; i < 5; i++) add(box(0.5, 0.34, 0.3), i % 2 ? M.red : M.bronze, -2.4 + i * 1.2, 1.15, -1.7, warung, { cast: false }); // jars on shelf
 add(new THREE.PlaneGeometry(3.2, 1.45), M.signWarung, 0, 2.78, 2.25, warung, { cast: false });
+add(new THREE.CylinderGeometry(0.016, 0.016, 0.55, 6), M.wood, 0.9, 3.02, 1.9, warung, { cast: false }); // lamp cord
+const lampBulbMat = new THREE.MeshBasicMaterial({ color: 0x554a38 });
+add(new THREE.SphereGeometry(0.085, 10, 8), lampBulbMat, 0.9, 2.72, 1.9, warung, { cast: false });      // lamp bulb
+const lampLight = new THREE.PointLight(0xffb36b, 0, 11, 1.8); lampLight.position.set(0.9, 2.66, 1.9); warung.add(lampLight);
 add(tbox(5.6, 0.09, 0.5, 2), M.plank, 0, 0.52, 2.6, warung);        // bench seat
 for (const bx of [-2.4, 2.4]) add(tbox(0.18, 0.5, 0.4, 1), M.wood, bx, 0.25, 2.6, warung);
 add(box(0.55, 0.7, 0.55), M.wood, -1.6, 0.35, 2.5, warung);         // small stool
@@ -177,6 +181,21 @@ const VOLCANO_PEAK = [-44, 66, -300];
 for (let i = 0; i < 10; i++) { const a = rt() * Math.PI * 2, d = 170 + rt() * 130; if (Math.hypot(Math.cos(a) * d - -26, Math.sin(a) * d - -150) < 95) continue; const h = add(new THREE.SphereGeometry(36 + rt() * 34, 18, 10), i % 2 ? M.hill : M.hillFar, Math.cos(a) * d, -10, Math.sin(a) * d - 40, world, { cast: false }); h.scale.y = 0.5 + rt() * 0.25; }
 for (let i = 0; i < 12; i++) { const a = rt() * Math.PI * 2, d = 480 + rt() * 220, hh = 110 + rt() * 110, r_ = 100 + rt() * 60; const g = new THREE.Group(); g.position.set(Math.cos(a) * d, -5, Math.sin(a) * d); world.add(g); add(new THREE.ConeGeometry(r_, hh, 7), M.mount, 0, hh / 2, 0, g, { cast: false }); add(new THREE.ConeGeometry(r_ * 0.3, hh * 0.3, 7), M.snow, 0, hh * 0.86, 0, g, { cast: false }); }
 
+// --- the beach (pantai) east of the village: sand, receded-sea mud, stranded boats (Ep.2+) ---
+const MUD = toon({ color: '#8a7355' }), SAND = toon({ color: '#d9c08a' }), SEAM = toon({ color: '#3d7ea6' }), PUDDLE = toon({ color: '#7fa8b8' });
+add(new THREE.BoxGeometry(42, 0.06, 66), SAND, 67, 0.01, -6, world, { cast: false });           // sand strip x 46..88
+add(new THREE.BoxGeometry(30, 0.06, 66), MUD, 102, 0.02, -6, world, { cast: false });           // wet mud x 87..117 (the sea pulled back)
+const seaDisc = add(new THREE.CircleGeometry(480, 40), toon({ color: '#4a90b8' }), 520, -0.01, -6, world, { cast: false }); seaDisc.rotation.x = -Math.PI / 2; // the sea: a disc east of the village, running to the horizon
+for (let i = 0; i < 6; i++) add(new THREE.CircleGeometry(1.6 + rt() * 2.2, 14), PUDDLE, 92 + rt() * 20, 0.055, -26 + rt() * 44, world, { cast: false }).rotation.x = -Math.PI / 2;
+const boat = (x, z, ry, tilt) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; world.add(g);
+  const hull = add(new THREE.BoxGeometry(3.6, 0.8, 1.3), toon({ color: '#a03d2d' }), 0, 0.42, 0, g); hull.rotation.z = tilt;
+  const rim = add(new THREE.BoxGeometry(3.9, 0.18, 1.5), M.wood, 0, 0.86, 0, g); rim.rotation.z = tilt;
+  const cab = add(new THREE.BoxGeometry(1.1, 0.7, 0.9), toon({ color: '#e8e2d4' }), -0.7, 1.2, 0, g); cab.rotation.z = tilt;
+  const mast = add(new THREE.CylinderGeometry(0.05, 0.07, 3.2, 6), M.wood, 0.9, 2.2, 0, g); mast.rotation.z = tilt + 0.1; return g; };
+boat(95, -7, 0.5, 0.16); boat(103, 5, -0.9, -0.13);
+for (let i = 0; i < 3; i++) add(new THREE.CylinderGeometry(0.09, 0.11, 1.6, 7), M.wood, 87.5, 0.8, -18 + i * 12, world);
+palm(49, -17, 6.5); palm(52, 9, 5.5);
+
 // clouds: painted billboards far away (no fog, no ink)
 const clouds = [];
 { const r = P.rng(90);
@@ -230,7 +249,7 @@ const inkScene = fs(new THREE.ShaderMaterial({ uniforms: inkU, vertexShader: `va
       if (card && ds > 0.) continue;            // character cards: never outlined by the world ink
       if (card) ds = 1e4;                        // sky
       vec3 ns = s.rgb*2.-1.;
-      e = max(e, smoothstep(.006, .02, (ds - d)/d));                           // depth jump, near side only
+      if (n.y < .9) e = max(e, smoothstep(.006, .02, (ds - d)/d));             // depth jump, near side only; flat ground/sea exempt (grazing angles self-ink otherwise)
       if (!card && abs(ds-d)/d < .06) e = max(e, smoothstep(.88, .72, dot(n, ns)) * .9); // crease
     }
     return e * (1. - smoothstep(140., 520., d)*.8);
@@ -285,6 +304,9 @@ function worldState(S, f) {
   for (let i = 0; i < pa.count; i++) { const x = base[i * 3], y = base[i * 3 + 1]; pa.setZ(i, Math.sin(f * 0.22 + x * 2.6 + y * 1.2) * amp * (x + 0.95)); }
   pa.needsUpdate = true;
   waterU.t.value = f / 30;
+  const lampOn = !!S.lampOn;
+  lampLight.intensity = lampOn ? 8 : 0;
+  lampBulbMat.color.set(lampOn ? 0xffd9a0 : 0x554a38);
 }
 
 function drawActors(list, cam) {

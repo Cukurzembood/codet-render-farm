@@ -704,6 +704,18 @@ const dmouth = (p, mx, y, rx, ry, u, tongue = false)=>{
 const mouth = (p, kind, mx, my, u, k = 1)=>{
     const mw = 4 * u;
     switch(kind){
+        case "lip0":
+            p.stroke([[mx - 5.5 * u * k, my], [mx + 5.5 * u * k, my - 0.8 * u]], mw);
+            break;
+        case "lip1":
+            dmouth(p, mx, my - 1 * u, 6 * u * k, 3.2 * u, u);
+            break;
+        case "lip2":
+            dmouth(p, mx, my - 1 * u, 8.5 * u * k, 5.6 * u, u);
+            break;
+        case "lip3":
+            dmouth(p, mx, my - 1 * u, 11 * u * k, 8.6 * u, u, true);
+            break;
         case "dash":
             p.stroke([
                 [
@@ -2451,6 +2463,9 @@ export const fxBlob = (p, col)=>{
 FACE.worry = { eye: ["lid", "lid"], brow: [3, 2], mouth: "frown" };
 FACE.talk = { eye: ["lid", "lid"], brow: [0, -1], mouth: "smileWide" };
 FACE.songong = { eye: ["lid", "lid"], brow: [4, -3], mouth: "smirk" };
+FACE.kesal = { eye: ["lid", "lid"], brow: [4, 3], mouth: "teeth" };
+FACE.takut = { eye: ["small", "small"], brow: [-5, -4], mouth: "wave" };
+FACE.bingung = { eye: ["lid", "small"], brow: [-2, 3], mouth: "dash" };
 
 export const OUTFITS = {
   codet: { tunic: "#31435f", shirt: "#f2ede2", pants: "#6b7048", skin: SKIN, mohawk: true, scar: true, earring: true, boots: "#e8e2d4" },
@@ -2513,7 +2528,7 @@ const hijabFrame = (p, H, cx, hc, col, light, ow, thick, u, HH, chin) => {
 export const codetFront = (p, key, opts = {}) => {
   const O = typeof key === "string" ? OUTFITS[key] : key;
   const { expr = "neutral", blink = 0, look = 0, facing = 0, seed = 3, L = "hang", R = "hang", tilt = 0, headTilt = 0,
-    bob = 0, step = 0, ripple = 0, light = rad(-120) } = opts;
+    bob = 0, step = 0, ripple = 0, lip = null, light = rad(-120) } = opts;
   const lid = lidOf(blink), skin = O.skin ?? SKIN;
   const H = headBlob(seed, 118, facing), W = 2 * H.a, HH = 2 * H.b, u = W / 100;
   const torsoL = O.stout ? 1.12 : 1.08, legsL = 1.38, sole = 975;
@@ -2606,10 +2621,12 @@ export const codetFront = (p, key, opts = {}) => {
   else if (O.cap) hatOn(p, { hat: "cap", cap: O.cap, jacket: O.tunic }, hp, H, cx, hc, light, seed, facing, false);
   else if (O.hair) hatOn(p, { hat: "hair", hair: O.hair, jacket: O.tunic }, hp, H, cx, hc, light, seed, facing, false);
   if (O.hijab) hijabFrame(p, H, cx, hc, O.hijab, light, ow, thick, u, HH, chin);
-  faceFront(p, cx, hc, W, expr, facing, look, lid, false, skin, O.moustache, !!O.stout);
+  faceFront(p, cx, hc, W, (lip != null && FACE[expr + "_lip" + lip]) ? expr + "_lip" + lip : expr, facing, look, lid, false, skin, O.moustache, !!O.stout);
   if (O.scar || O.earring) scarEarring(p, H, cx, hc, facing, u);
   p.rot = null;
 };
+
+
 
 /** soft smoke puff cluster (t 0..1 life cycle), drawn around origin in card space */
 export const fxSmoke = (p, t, col = "#cfd4d8", dark = 0) => {
@@ -2665,3 +2682,21 @@ export const flockDraw = (p, key, opts = {}) => {
     p.ell(bx, by + 2, 4.5, 3, col, 0);
   }
 };
+
+/** falling volcanic ash specks across the card (design space 600x1000) */
+export const fxAsh = (p, f, density = 1, seed = 3) => {
+  const g = p.g; g.save();
+  const n = Math.floor(110 * density);
+  for (let i = 0; i < n; i++) {
+    const sp = 2 + (i % 5) * 0.9;
+    const x = ((i * 197.31 + seed * 311.7 + f * (0.5 + (i % 3) * 0.3)) % 640) - 20;
+    const y = ((i * 89.73 + seed * 57.3 + f * sp) % 1040) - 20;
+    const r = 0.9 + (i % 4) * 0.55;
+    g.globalAlpha = 0.22 + (i % 5) * 0.11;
+    p.ell(x, y, r, r * 0.8, "#dfe3e6", 0);
+  }
+  g.restore();
+};
+
+// lipsync variants: every FACE gets _lip0.._lip3 twins (mouth driven by dialogue envelope)
+for (const k of Object.keys(FACE)) for (let l = 0; l <= 3; l++) FACE[k + "_lip" + l] = { ...FACE[k], mouth: "lip" + l };
