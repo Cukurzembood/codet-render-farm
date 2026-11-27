@@ -5,7 +5,7 @@ on:
     inputs:
       total:
         description: "Total frames in story.js"
-        default: "2095"
+        default: "3794"
   push:
     branches: [main]
     paths:
@@ -40,7 +40,7 @@ jobs:
       - name: Render my slice
         working-directory: project
         env:
-          TOTAL: ${{ inputs.total || '2095' }}
+          TOTAL: ${{ inputs.total || '3794' }}
           CHUNKS: "10"
           SLICE: ${{ matrix.slice }}
         run: |
@@ -71,7 +71,7 @@ jobs:
       - name: Zip frames and publish as release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TOTAL: ${{ inputs.total || '2095' }}
+          TOTAL: ${{ inputs.total || '3794' }}
         run: |
           COUNT=$(ls allframes/*.jpg | wc -l)
           echo "frames collected: $COUNT / $TOTAL"
