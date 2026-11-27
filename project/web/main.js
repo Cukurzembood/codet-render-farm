@@ -102,8 +102,8 @@ const PALM = [3.4, -8.8];
     px += 0.045; seg.position.set(px, 0.42 + i * 0.8, pz); seg.rotation.z = -0.055;
     seg.castShadow = true; scene.add(seg);
   }
-  const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 2.0, 8), trunkM);
-  branch.position.set(3.4, 3.82, -9.05); branch.rotation.z = Math.PI / 2; branch.rotation.x = 0.05;
+  const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 1.5, 8), trunkM);
+  branch.position.set(3.4, 3.82, -8.95); branch.rotation.z = Math.PI / 2; branch.rotation.x = 0.05;
   branch.castShadow = true; scene.add(branch);
   const frondM = new THREE.MeshStandardMaterial({ color: 0x4d7d3a, roughness: 0.9, side: THREE.DoubleSide });
   for (let i = 0; i < 8; i++) {
