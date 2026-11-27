@@ -1,4 +1,10 @@
 name: render-farm
+# RACE FIX (27 Nov 2026): two pushes 2 min apart ran concurrently and both
+# assemble jobs fought over the same `latest-render` release tag -> run #5
+# failed with HTTP 404 on upload. Serialise runs; queued runs wait.
+concurrency:
+  group: render-farm
+  cancel-in-progress: false
 
 on:
   workflow_dispatch:
