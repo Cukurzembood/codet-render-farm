@@ -1,371 +1,428 @@
 import * as THREE from './lib/three.module.js';
-import * as T from './toon.js';
-import * as P from './paint.js';
-import { SHOTS, TOTAL, shotAt, camAt, dofAt, LIGHTS, lightFor, actorsAt, worldAt, fxAt } from './story.js';
+import { createWorld, createBeach } from './world3d.js';
+import { createCodet } from './codet3d.js';
+import { createVillager, createChicken } from './warga3d.js';
 
-const canvas = document.getElementById('c');
-const W = canvas.width, H = canvas.height;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true });
-renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+// Ep.2 "Langit Gelap" V2 RE-SKIN — full 28-shot build on the production 3D kit.
+// Same script/VO/timing as the approved Ep.2 audio (voice.wav 123.41s, 3794 frames
+// @30fps incl. the 3s teaser tail); visuals only, rebuilt from the old 2D story.js
+// shot map (one phrase = one shot), with the 27 Nov blocking rules: one camera move
+// per shot, stepped turns, eased starts/stops, background actors stay alive.
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.domElement.id = 'c';
+renderer.setPixelRatio(1); renderer.setSize(720, 1280, false);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.NoToneMapping;
-
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.06;
+document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(40, W / H, 0.08, 1500);
-const rx = (a) => a * Math.PI / 180;
+const camera = new THREE.PerspectiveCamera(40, 720 / 1280, 0.08, 600);
 
-// ---------- materials ----------
-const grad = (() => { const d = new Uint8Array([90, 90, 90, 255, 255, 255, 255, 255]); const t = new THREE.DataTexture(d, 2, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
-const toon = (opts) => new THREE.MeshToonMaterial({ gradientMap: grad, ...opts });
-const texM = (c, rx_ = 1, ry_ = 1, color = '#ffffff') => toon({ map: P.tex(c, rx_, ry_), color });
-const M = {
-  plank: texM(P.planks(1), 1, 6), beam: texM(P.beam(2), 1, 2), beamDark: texM(P.beam(3, [28, 36, 30]), 1, 2),
-  rot: texM(P.rotten(4), 1, 1), rotB: texM(P.rotten(14), 1, 1),
-  stone: texM(P.stone(4), 1, 1), stoneMoss: texM(P.mossy(P.stone(4), 5, 1.2), 1, 1),
-  grass: texM(P.grass(6), 40, 40), dirt: texM(P.dirt(7), 6, 30), plaster: texM(P.plaster(8), 1, 1), plaster2: texM(P.plaster(18, 28), 1, 1),
-  roof: texM(P.roof(9), 2, 2), marble: texM(P.marble(10), 1, 1), marbleTop: toon({ color: '#ece2cf' }),
-  trunk: toon({ color: '#6a4a32' }), cypress: toon({ color: '#3f6b36' }), pine: toon({ color: '#5c8a3c' }), bush: toon({ color: '#6c9a42' }),
-  hill: toon({ color: '#7aa64c' }), hillFar: toon({ color: '#86ad60' }), mount: toon({ color: '#8fa7b8' }), snow: toon({ color: '#f4f6fa' }),
-  iron: toon({ color: '#5c5a57' }), bronze: toon({ color: '#b08a4a' }), wood: toon({ color: '#7a5434' }), door: toon({ color: '#5a3a24' }),
-  window: toon({ color: '#2b2430' }), red: toon({ color: '#b8282b' }),
+const world = createWorld(scene);
+const beach = createBeach();
+beach.group.position.set(0, 0, 30);
+beach.group.rotation.y = Math.PI; // sea extends to +z, mud band faces the kampung
+beach.setSea(0.85); // receded the whole episode: boats stranded, foam line far away
+beach.group.visible = false;
+scene.add(beach.group);
+
+const codet = createCodet(); scene.add(codet.group);
+const busiti = createVillager('busiti'); scene.add(busiti.group);
+const pakrt = createVillager('pakrt'); scene.add(pakrt.group);
+const wargaA = createVillager('wargaA'); scene.add(wargaA.group);
+const wargaB = createVillager('wargaB'); scene.add(wargaB.group);
+const chickens = [];
+for (const v of ['putih', 'coklat', 'putih', 'coklat']) {
+  const ch = createChicken(v); ch.group.scale.setScalar(0.85); scene.add(ch.group); chickens.push(ch);
+}
+
+// falling ash: one Points cloud, re-centred per shot, density from the shot table
+const ASH_N = 420;
+const ashPos = new Float32Array(ASH_N * 3);
+const ashSeed = [];
+for (let i = 0; i < ASH_N; i++) {
+  ashSeed.push([Math.random(), Math.random(), Math.random(), 0.5 + Math.random()]);
+  ashPos[i * 3] = (ashSeed[i][0] - 0.5) * 17;
+  ashPos[i * 3 + 1] = ashSeed[i][1] * 8;
+  ashPos[i * 3 + 2] = (ashSeed[i][2] - 0.5) * 17;
+}
+const ashGeo = new THREE.BufferGeometry();
+ashGeo.setAttribute('position', new THREE.BufferAttribute(ashPos, 3));
+const ashMat = new THREE.PointsMaterial({ color: 0xd8d2c4, size: 0.06, transparent: true, opacity: 0, depthWrite: false });
+const ashPts = new THREE.Points(ashGeo, ashMat);
+ashPts.visible = false; ashPts.frustumCulled = false;
+scene.add(ashPts);
+
+// ---------- timing (identical to the approved Ep.2 audio build) ----------
+const FPS = 30;
+const RAW = [8.67, 5.85, 9.74, 4.18, 5.37, 6.82, 5.65, 13.01, 5.29, 8.71, 7.27, 3.45, 11.60, 13.52]; // c1 c2 c3 c4 c5 c6 c7 c11 c12 c8 c13 c14 c9 c10
+const GAP = 0.15, ATEMPO = 0.90;
+const F30 = (s) => Math.round(s * FPS);
+const cStart = [], cEnd = [];
+{ let acc = 0; for (let k = 0; k < RAW.length; k++) { const st = (acc + GAP * k) / ATEMPO; cStart.push(F30(st)); cEnd.push(F30(st + RAW[k] / ATEMPO)); acc += RAW[k]; } }
+const VO_END = cEnd[RAW.length - 1];
+const ph = (ci, f0, f1) => [Math.round(cStart[ci] + f0 * (cEnd[ci] - cStart[ci])), Math.round(cStart[ci] + f1 * (cEnd[ci] - cStart[ci])) - 1];
+const W = {
+  p1: ph(0, 0, 6 / 19), p2: ph(0, 6 / 19, 1),
+  p3: ph(1, 0, 1),
+  p4: ph(2, 0, 10 / 19), p5: ph(2, 10 / 19, 1),
+  p6: ph(3, 0, 1),
+  p7: ph(4, 0, 1),
+  p8: ph(5, 0, 8 / 15), p9: ph(5, 8 / 15, 1),
+  p10: ph(6, 0, 1),
+  q1: ph(7, 0, 5 / 19), q2: ph(7, 5 / 19, 12 / 19), q3: ph(7, 12 / 19, 1),
+  q4: ph(8, 0, 1),
+  p11: ph(9, 0, 4 / 15), p12: ph(9, 4 / 15, 7 / 15), p13: ph(9, 7 / 15, 1),
+  q5: ph(10, 0, 5 / 15), q6: ph(10, 5 / 15, 10 / 15), q7: ph(10, 10 / 15, 1),
+  q8: ph(11, 0, 0.55), q9: ph(11, 0.55, 1),
+  p14: ph(12, 0, 9 / 16), p15: ph(12, 9 / 16, 1),
+  p16: ph(13, 0, 4 / 31), p17: ph(13, 4 / 31, 23 / 31), p18: ph(13, 23 / 31, 1),
+  teaser: [VO_END + 1, VO_END + 90],
 };
-M.banner = new THREE.MeshToonMaterial({ gradientMap: grad, map: P.tex(P.banner()), alphaTest: 0.5, side: THREE.DoubleSide });
-// helmet
-const helmetIn = P.tex(P.helmetInside()); helmetIn.wrapS = helmetIn.wrapT = THREE.ClampToEdgeWrapping;
-M.helmIn = new THREE.MeshToonMaterial({ gradientMap: grad, map: helmetIn, side: THREE.BackSide });
-M.helmOut = toon({ color: '#8f8a7e' });
+window.TOTAL = VO_END + 91;
+const LAMP_ON = Math.round(W.p8[0] + 0.68 * (W.p8[1] - W.p8[0]));
+const ORDER = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'p11', 'p12', 'p13', 'q5', 'q6', 'q7', 'q8', 'q9', 'p14', 'p15', 'p16', 'p17', 'p18', 'teaser'];
+const LIGHT = { p1: 'pagiAbu', p2: 'pagiAbu', p3: 'pagiAbu', p4: 'gloom1', p5: 'gloom1', p6: 'gloom1', p7: 'gloom2', p8: 'gloom2', p9: 'gloom2', p10: 'gloom2', q1: 'gloom2', q2: 'gloom2', q3: 'gloom2', q4: 'gloom2', p11: 'gloom2', p12: 'gloom2', p13: 'gloom2', q5: 'gloom2', q6: 'gloom2', q7: 'gloom2', q8: 'gloom2', q9: 'gloom2', p14: 'gloom2', p15: 'gloom2', p16: 'gloom2', p17: 'gloom2', p18: 'gloom2', teaser: 'gloom2' };
+const shotAt = (f) => ORDER.find((id) => f >= W[id][0] && f <= W[id][1]) || 'teaser';
 
-// ---------- ink / normal-depth contract ----------
-const NOINK = 'noink'; // userData flag: never outlined (cards, fx, water handled specially)
-const ndMat = new THREE.ShaderMaterial({
-  vertexShader: `varying vec3 vN; varying float vD; void main(){ vN = normalize(normalMatrix*normal); vec4 mv = modelViewMatrix*vec4(position,1.); vD = -mv.z; gl_Position = projectionMatrix*mv; }`,
-  fragmentShader: `varying vec3 vN; varying float vD; void main(){ vec3 n = normalize(vN); if(!gl_FrontFacing) n = -n; gl_FragColor = vec4(n*.5+.5, vD); }`,
-  side: THREE.DoubleSide,
-});
-const cardNd = (map) => new THREE.ShaderMaterial({
-  uniforms: { map: { value: map } },
-  vertexShader: `varying vec2 vUv; varying float vD; void main(){ vUv=uv; vec4 mv = modelViewMatrix*vec4(position,1.); vD=-mv.z; gl_Position=projectionMatrix*mv; }`,
-  fragmentShader: `uniform sampler2D map; varying vec2 vUv; varying float vD; void main(){ if(texture2D(map,vUv).a<.5) discard; gl_FragColor=vec4(0.,0.,0.,vD); }`,
-  side: THREE.DoubleSide,
-});
-const waterNd = new THREE.ShaderMaterial({
-  vertexShader: `varying float vD; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.); vD=-mv.z; gl_Position=projectionMatrix*mv; }`,
-  fragmentShader: `varying float vD; void main(){ gl_FragColor=vec4(.5,1.,.5,vD); }`,
-});
+// ---------- lipsync envelopes (measured from the trimmed dialogue chunks, ATEMPO 0.90) ----------
+const LIP = {
+  p3: [[20, 0], [2, 1], [2, 3], [5, 2], [32, 0], [4, 3], [4, 2], [2, 2], [4, 1], [4, 0], [2, 2], [5, 1], [4, 1], [3, 0], [2, 2], [2, 0], [2, 1], [2, 2], [2, 1], [28, 0], [2, 3], [2, 1], [3, 0], [5, 1], [3, 3], [3, 0], [5, 2], [2, 0], [14, 1], [4, 2], [5, 0], [5, 2], [6, 1], [4, 1]],
+  p7: [[20, 0], [8, 3], [12, 0], [4, 3], [4, 3], [3, 0], [3, 3], [2, 1], [3, 0], [5, 3], [4, 0], [4, 2], [2, 3], [2, 2], [4, 3], [5, 3], [3, 2], [7, 3], [11, 0], [6, 2], [3, 0], [2, 3], [4, 2], [2, 3], [3, 2], [6, 3], [3, 3], [2, 2], [12, 3], [5, 2], [3, 3], [3, 2], [2, 3], [4, 2], [7, 3], [3, 1], [3, 0]],
+  p10: [[15, 0], [4, 0], [5, 1], [4, 3], [24, 0], [4, 2], [2, 1], [9, 0], [4, 3], [5, 2], [3, 1], [5, 2], [3, 2], [9, 0], [2, 1], [3, 2], [3, 0], [4, 0], [3, 1], [3, 2], [7, 0], [10, 0], [4, 1], [5, 3], [9, 0], [8, 1], [3, 3], [2, 1], [4, 2], [3, 2], [5, 1], [6, 3], [2, 1], [6, 0]],
+  q4: [[2, 2], [1, 3], [1, 2], [1, 1], [11, 0], [1, 1], [6, 3], [1, 2], [1, 1], [16, 0], [1, 2], [2, 3], [1, 2], [4, 3], [3, 2], [5, 3], [1, 2], [1, 1], [1, 2], [2, 3], [1, 1], [1, 0], [1, 1], [1, 2], [2, 3], [3, 2], [3, 3], [1, 1], [1, 0], [1, 1], [13, 0], [1, 2], [11, 3], [1, 0], [1, 2], [9, 3], [1, 2], [2, 1], [3, 2], [2, 1], [1, 2], [1, 1], [3, 2], [2, 1], [2, 3], [1, 2], [2, 3], [1, 2], [1, 1], [2, 2], [2, 3], [1, 2], [6, 3], [1, 2], [1, 1], [7, 3], [1, 2], [3, 3], [1, 1], [2, 3], [1, 2], [3, 3], [1, 2], [4, 3], [1, 2], [1, 1], [3, 0]],
+  q5: [[10, 0], [1, 1], [2, 2], [1, 3], [1, 2], [2, 3], [1, 2], [2, 1], [17, 0], [3, 2], [2, 3], [1, 2], [2, 3], [2, 2], [2, 1], [1, 2], [3, 3], [1, 2], [2, 3], [3, 2], [2, 0], [1, 1], [2, 3], [1, 2], [1, 3], [1, 2], [2, 1], [1, 2], [1, 3], [2, 2], [1, 3], [1, 2], [1, 1], [28, 0], [1, 2], [2, 3], [2, 1], [1, 2], [2, 3], [1, 2], [1, 1], [3, 2], [4, 3], [2, 2], [1, 1], [24, 0], [1, 1], [1, 2], [2, 3], [1, 0], [1, 1], [2, 3], [1, 2], [1, 1], [1, 2], [1, 3], [1, 2], [2, 3], [3, 1], [1, 2], [3, 3], [1, 2], [1, 1], [1, 2], [1, 3], [1, 2], [2, 1], [21, 0], [2, 3], [1, 2], [1, 3], [1, 2], [4, 3], [1, 2], [2, 0], [1, 2], [5, 3], [1, 2], [1, 0], [1, 1], [6, 3], [1, 2], [1, 3], [1, 2], [2, 1], [3, 2], [1, 3], [1, 2], [2, 1], [1, 2], [2, 1], [2, 0]],
+};
+const lipAt = (id, f, base) => {
+  let off = f - (base ?? W[id][0]);
+  for (const [n, lv] of LIP[id]) { if (off < n) return lv; off -= n; }
+  return 0;
+};
+const lipV = (id, f, base) => Math.min(2, lipAt(id, f, base)); // villager mouths take 0..2
 
 // ---------- helpers ----------
-const add = (geo, mat, x = 0, y = 0, z = 0, parent = scene, opts = {}) => {
-  const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = opts.cast ?? true; m.receiveShadow = true; parent.add(m); return m;
-};
-const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
-const uvScale = (geo, su, sv) => { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv); return geo; };
-/** box with world-scaled UVs per face (texel density 1 tile per `t` metres) */
-const tbox = (w, h, d, t = 2) => {
-  const g = box(w, h, d), uv = g.attributes.uv;
-  const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
-  for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k; uv.setXY(i, uv.getX(i) * dims[f][0] / t, uv.getY(i) * dims[f][1] / t); }
-  return g;
-};
-
-// ---------- sky ----------
-const skyU = { top: { value: new THREE.Color() }, hor: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3() }, sunCol: { value: new THREE.Color() }, sunSize: { value: 0 } };
-const sky = new THREE.Mesh(new THREE.SphereGeometry(1200, 32, 16), new THREE.ShaderMaterial({
-  uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
-  vertexShader: `varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-  fragmentShader: `uniform vec3 top, hor, sunDir, sunCol; uniform float sunSize; varying vec3 vP;
-    void main(){ float h = clamp(vP.y,0.,1.); vec3 c = mix(hor, top, pow(h, .55)); if(vP.y<0.) c = hor;
-      float s = dot(normalize(vP), normalize(sunDir)); c += sunCol * (smoothstep(1.-sunSize, 1.-sunSize*.6, s) + .35*pow(max(s,0.), 24.)*step(.001,sunSize));
-      gl_FragColor = vec4(c,1.); }`,
-}));
-sky.userData.sky = true; scene.add(sky);
-
-// ---------- lights ----------
-const hemi = new THREE.HemisphereLight('#ffffff', '#ffffff', 1); scene.add(hemi);
-const sun = new THREE.DirectionalLight('#ffffff', 2); sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03; sun.shadow.radius = 2;
-scene.add(sun); scene.add(sun.target);
-scene.fog = new THREE.Fog('#ffffff', 40, 600);
-
-// ---------- world: Codet's kampung (ground y=0, street along X, volcano at -Z) ----------
-const DECK = 0, HALF = 26, BW = 2.3; // DECK kept as the ground level for the card/blob machinery
-const world = new THREE.Group(); scene.add(world);
-// sign textures painted on canvas
-const signTex = (title, sub, bg = '#7a4a26', fg = '#ffe9b8') => {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 256; const g = c.getContext('2d');
-  g.fillStyle = bg; g.fillRect(0, 0, 512, 256); g.strokeStyle = fg; g.lineWidth = 10; g.strokeRect(14, 14, 484, 228);
-  g.fillStyle = fg; g.textAlign = 'center'; g.font = '900 64px Arial'; g.fillText(title, 256, sub ? 118 : 148);
-  if (sub) { g.font = '700 40px Arial'; g.fillText(sub, 256, 190); }
-  return P.tex(c);
-};
-M.volcano = toon({ color: '#6886a0' });
-M.street = texM(P.dirt(21), 6, 30, '#a08b6d');
-M.signWarung = toon({ map: signTex('WARUNG', 'BU SITI', '#7a4a26', '#ffe9b8') });
-M.signWarung2 = toon({ map: signTex('BU SITI', 'NASI • KOPI', '#7a4a26', '#ffe9b8') });
-M.signKelontong = toon({ map: signTex('TOKO', 'KELONTONG', '#2e5a50', '#e8f4d8') });
-M.flag = new THREE.MeshToonMaterial({ gradientMap: grad, map: (() => { const c = document.createElement('canvas'); c.width = 128; c.height = 256; const g = c.getContext('2d'); g.fillStyle = '#d23b2e'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#f4f1ea'; g.fillRect(0, 128, 128, 128); return P.tex(c); })(), side: THREE.DoubleSide });
-// ground: grass field + dirt street + yards
-const waterU = { t: { value: 0 }, deep: { value: new THREE.Color('#2f6f8f') }, shal: { value: new THREE.Color('#5fa8bf') }, glint: { value: new THREE.Color('#e9f6ff') } };
-const ground = add(new THREE.PlaneGeometry(700, 700), M.grass, 0, -0.02, -60, world, { cast: false }); ground.rotation.x = -Math.PI / 2;
-const street = add(new THREE.PlaneGeometry(240, 7), M.street, 0, 0.0, 0, world, { cast: false }); street.rotation.x = -Math.PI / 2;
-const yard = add(new THREE.PlaneGeometry(60, 16), M.dirt, -2, 0.005, -11, world, { cast: false }); yard.rotation.x = -Math.PI / 2;
-// --- warung Bu Siti at origin, facing the street (+Z) ---
-const warung = new THREE.Group(); warung.position.set(0, 0, -7.5); world.add(warung);
-for (const [px, pz] of [[-3.2, 1.6], [3.2, 1.6], [-3.2, -1.8], [3.2, -1.8]]) add(new THREE.CylinderGeometry(0.09, 0.11, 3.1, 8), M.wood, px, 1.55, pz, warung);
-const wroof = add(tbox(8.2, 0.14, 5.6, 2), M.roof, 0, 3.35, -0.1, warung); wroof.rotation.x = 0.10;
-add(tbox(7.6, 0.9, 1.1, 2), M.wood, 0, 0.45 + 0.45, 1.15, warung); // counter
-add(tbox(7.0, 0.08, 0.9, 2), M.plank, 0, 1.36, 1.15, warung);      // counter top
-add(tbox(6.8, 1.5, 0.5, 2), M.plank, 0, 0.75, -1.7, warung);       // back shelf
-for (let i = 0; i < 5; i++) add(box(0.5, 0.34, 0.3), i % 2 ? M.red : M.bronze, -2.4 + i * 1.2, 1.15, -1.7, warung, { cast: false }); // jars on shelf
-add(new THREE.PlaneGeometry(3.2, 1.45), M.signWarung, 0, 2.78, 2.25, warung, { cast: false });
-add(new THREE.CylinderGeometry(0.016, 0.016, 0.55, 6), M.wood, 0.9, 3.02, 1.9, warung, { cast: false }); // lamp cord
-const lampBulbMat = new THREE.MeshBasicMaterial({ color: 0x554a38 });
-add(new THREE.SphereGeometry(0.085, 10, 8), lampBulbMat, 0.9, 2.72, 1.9, warung, { cast: false });      // lamp bulb
-const lampLight = new THREE.PointLight(0xffb36b, 0, 11, 1.8); lampLight.position.set(0.9, 2.66, 1.9); warung.add(lampLight);
-add(tbox(5.6, 0.09, 0.5, 2), M.plank, 0, 0.52, 2.6, warung);        // bench seat
-for (const bx of [-2.4, 2.4]) add(tbox(0.18, 0.5, 0.4, 1), M.wood, bx, 0.25, 2.6, warung);
-add(box(0.55, 0.7, 0.55), M.wood, -1.6, 0.35, 2.5, warung);         // small stool
-add(tbox(13, 0.07, 1.1, 2), M.plank, -0.5, 0.035, -3.5, world, { cast: false }); // plank walkway to the warung
-// --- the well (sumur) right of the warung ---
-const well = new THREE.Group(); well.position.set(5.6, 0, -6.4); world.add(well);
-const wellRing = add(new THREE.CylinderGeometry(0.85, 0.95, 0.8, 14, 1, true), M.stone, 0, 0.4, 0, well);
-add(new THREE.TorusGeometry(0.88, 0.09, 8, 20), M.stone, 0, 0.82, 0, well).rotation.x = Math.PI / 2;
-for (const s of [-1, 1]) add(new THREE.CylinderGeometry(0.07, 0.09, 1.9, 8), M.wood, s * 0.95, 0.95, 0, well);
-const wroof2 = add(tbox(2.6, 0.1, 1.6, 2), M.roof, 0, 2.0, 0, well); wroof2.rotation.z = 0.06;
-add(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 8), M.wood, 0, 1.55, 0, well).rotation.z = Math.PI / 2;
-// --- toko kelontong left of the warung ---
-const toko = new THREE.Group(); toko.position.set(-10.5, 0, -8.5); toko.rotation.y = 0.12; world.add(toko);
-add(tbox(6.5, 3.4, 5, 2), M.plaster2, 0, 1.7, 0, toko);
-const troof = add(new THREE.ConeGeometry(5.4, 2.0, 4), M.roof, 0, 4.4, 0, toko); troof.rotation.y = Math.PI / 4; troof.scale.set(1.15, 1, 0.9);
-add(new THREE.PlaneGeometry(3.2, 1.6), M.signKelontong, 0, 2.7, 2.53, toko, { cast: false });
-add(box(1.6, 2.2, 0.12), M.window, -1.2, 1.1, 2.53, toko, { cast: false });
-add(box(1.1, 2.0, 0.12), M.door, 1.6, 1.0, 2.53, toko, { cast: false });
-for (let i = 0; i < 3; i++) add(box(0.7, 0.5, 0.7), M.wood, -2.2 + i * 0.9, 0.25, 3.1, toko); // crates
-// --- village houses ---
-const houses = [];
-const house = (x, z, w, d, h, rot, mat = M.plaster) => {
-  const g = new THREE.Group(); g.position.set(x, DECK, z); g.rotation.y = rot; world.add(g);
-  add(tbox(w, h, d, 2), mat, 0, h / 2, 0, g);
-  const rf = add(new THREE.ConeGeometry(Math.hypot(w, d) / 2 + 0.5, 1.8, 4), M.roof, 0, h + 0.9, 0, g); rf.rotation.y = Math.PI / 4; rf.scale.set(w / Math.hypot(w, d) * 1.414, 1, d / Math.hypot(w, d) * 1.414);
-  add(box(0.9, 1.8, 0.1), M.door, 0, 0.9, d / 2 + 0.03, g, { cast: false });
-  for (const s of [-1, 1]) add(box(0.6, 0.7, 0.1), M.window, s * w * 0.3, h * 0.62, d / 2 + 0.03, g, { cast: false });
-  houses.push(g); return g;
-};
-const rh = P.rng(12);
-[[-20, -16], [-30, -10], [14, -17], [24, -12], [34, -19], [-38, -20], [44, -14]].forEach(([x, z], i) =>
-  house(x, z, 4.5 + rh() * 2.5, 4 + rh() * 2, 3.0 + rh() * 1.6, rh() * 0.5 - 0.25, i % 2 ? M.plaster : M.plaster2));
-[[18, 13], [-24, 14], [30, 16]].forEach(([x, z], i) => house(x, z, 4 + rh() * 2, 4 + rh() * 2, 3 + rh(), Math.PI + rh() * 0.4 - 0.2, i % 2 ? M.plaster2 : M.plaster));
-// --- mosque silhouette far left ---
-const mosque = new THREE.Group(); mosque.position.set(-58, 0, -34); world.add(mosque);
-add(tbox(10, 5, 8, 2), M.plaster, 0, 2.5, 0, mosque);
-add(new THREE.SphereGeometry(3.4, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.cypress, 0, 5, 0, mosque);
-add(new THREE.CylinderGeometry(0.16, 0.2, 2.6, 8), M.iron, 0, 9.4, 0, mosque);
-add(tbox(1.6, 11, 1.6, 2), M.plaster, 7.5, 5.5, 0, mosque);
-// --- flag pole with the red-white flag ---
-const flagG = new THREE.Group(); flagG.position.set(8.6, 0, -3.4); world.add(flagG);
-add(new THREE.CylinderGeometry(0.06, 0.09, 7.2, 8), M.wood, 0, 3.6, 0, flagG);
-const flagCloth = add(new THREE.PlaneGeometry(1.9, 1.25, 8, 4), M.flag, 0.98, 6.4, 0, flagG);
-flagCloth.userData.cloth = flagCloth.geometry.attributes.position.array.slice();
-// --- trees: palms + leafy ---
-const palm = (x, z, h = 6) => { const g = new THREE.Group(); g.position.set(x, 0, z); world.add(g); const t = add(new THREE.CylinderGeometry(0.14, 0.24, h, 7), M.trunk, 0, h / 2, 0, g); t.rotation.z = 0.05; for (let i = 0; i < 6; i++) { const lf = add(new THREE.ConeGeometry(0.5, 3.4, 4), M.pine, 0, h + 0.4, 0, g); lf.rotation.z = 1.15; lf.rotation.y = i / 6 * Math.PI * 2; lf.position.set(Math.cos(i / 6 * Math.PI * 2) * 1.1, h + 0.55, Math.sin(i / 6 * Math.PI * 2) * 1.1); lf.scale.set(1, 1, 0.28); } return g; };
-const leafy = (x, z, h = 5) => { const g = new THREE.Group(); g.position.set(x, 0, z); world.add(g); add(new THREE.CylinderGeometry(0.18, 0.3, h * 0.55, 7), M.trunk, 0, h * 0.27, 0, g); const c = add(new THREE.SphereGeometry(1, 12, 10), M.pine, 0, h * 0.55 + 1.2, 0, g); c.scale.set(2.6, 1.9, 2.6); const c2 = add(new THREE.SphereGeometry(1, 10, 8), M.bush, 1.4, h * 0.55 + 0.6, 0.5, g); c2.scale.set(1.6, 1.2, 1.6); return g; };
-const rt = P.rng(44);
-palm(-6.5, -13); palm(12.5, -12); palm(-16, -4); palm(20, -6); leafy(-13.5, -14); leafy(8, -16); leafy(26, -9); leafy(-28, -6); leafy(38, -12);
-for (let i = 0; i < 10; i++) { const x = -60 + rt() * 120, z = -26 - rt() * 30; if (Math.abs(x) < 14 && z > -30) continue; (i % 2 ? palm : leafy)(x, z, 5 + rt() * 2); }
-for (let i = 0; i < 14; i++) add(new THREE.SphereGeometry(0.7 + rt() * 0.7, 10, 8), M.bush, -50 + rt() * 100, 0.25, -14 + rt() * 22, world).scale.y = 0.7;
-// --- the volcano (Krakatau) far behind the village + foothills ---
-const volcano = new THREE.Group(); volcano.position.set(-44, 0, -300); world.add(volcano);
-add(new THREE.ConeGeometry(72, 62, 24), M.volcano, 0, 31, 0, volcano, { cast: false });
-add(new THREE.ConeGeometry(16, 10, 16), toon({ color: '#6d5a4a' }), 0, 59, 0, volcano, { cast: false });
-const VOLCANO_PEAK = [-44, 66, -300];
-for (let i = 0; i < 10; i++) { const a = rt() * Math.PI * 2, d = 170 + rt() * 130; if (Math.hypot(Math.cos(a) * d - -26, Math.sin(a) * d - -150) < 95) continue; const h = add(new THREE.SphereGeometry(36 + rt() * 34, 18, 10), i % 2 ? M.hill : M.hillFar, Math.cos(a) * d, -10, Math.sin(a) * d - 40, world, { cast: false }); h.scale.y = 0.5 + rt() * 0.25; }
-for (let i = 0; i < 12; i++) { const a = rt() * Math.PI * 2, d = 480 + rt() * 220, hh = 110 + rt() * 110, r_ = 100 + rt() * 60; const g = new THREE.Group(); g.position.set(Math.cos(a) * d, -5, Math.sin(a) * d); world.add(g); add(new THREE.ConeGeometry(r_, hh, 7), M.mount, 0, hh / 2, 0, g, { cast: false }); add(new THREE.ConeGeometry(r_ * 0.3, hh * 0.3, 7), M.snow, 0, hh * 0.86, 0, g, { cast: false }); }
-
-// --- the beach (pantai) east of the village: sand, receded-sea mud, stranded boats (Ep.2+) ---
-const MUD = toon({ color: '#8a7355' }), SAND = toon({ color: '#d9c08a' }), SEAM = toon({ color: '#3d7ea6' }), PUDDLE = toon({ color: '#7fa8b8' });
-add(new THREE.BoxGeometry(42, 0.06, 66), SAND, 67, 0.01, -6, world, { cast: false });           // sand strip x 46..88
-add(new THREE.BoxGeometry(30, 0.06, 66), MUD, 102, 0.02, -6, world, { cast: false });           // wet mud x 87..117 (the sea pulled back)
-const seaDisc = add(new THREE.CircleGeometry(480, 40), toon({ color: '#4a90b8' }), 520, -0.01, -6, world, { cast: false }); seaDisc.rotation.x = -Math.PI / 2; // the sea: a disc east of the village, running to the horizon
-for (let i = 0; i < 6; i++) add(new THREE.CircleGeometry(1.6 + rt() * 2.2, 14), PUDDLE, 92 + rt() * 20, 0.055, -26 + rt() * 44, world, { cast: false }).rotation.x = -Math.PI / 2;
-const boat = (x, z, ry, tilt) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; world.add(g);
-  const hull = add(new THREE.BoxGeometry(3.6, 0.8, 1.3), toon({ color: '#a03d2d' }), 0, 0.42, 0, g); hull.rotation.z = tilt;
-  const rim = add(new THREE.BoxGeometry(3.9, 0.18, 1.5), M.wood, 0, 0.86, 0, g); rim.rotation.z = tilt;
-  const cab = add(new THREE.BoxGeometry(1.1, 0.7, 0.9), toon({ color: '#e8e2d4' }), -0.7, 1.2, 0, g); cab.rotation.z = tilt;
-  const mast = add(new THREE.CylinderGeometry(0.05, 0.07, 3.2, 6), M.wood, 0.9, 2.2, 0, g); mast.rotation.z = tilt + 0.1; return g; };
-boat(95, -7, 0.5, 0.16); boat(103, 5, -0.9, -0.13);
-for (let i = 0; i < 3; i++) add(new THREE.CylinderGeometry(0.09, 0.11, 1.6, 7), M.wood, 87.5, 0.8, -18 + i * 12, world);
-palm(49, -17, 6.5); palm(52, 9, 5.5);
-
-// clouds: painted billboards far away (no fog, no ink)
-const clouds = [];
-{ const r = P.rng(90);
-  for (let i = 0; i < 14; i++) {
-    const c = document.createElement('canvas'); c.width = 600; c.height = 400; const pen = new T.Pen(c.getContext('2d')); pen.ol = 0;
-    pen.g.translate(300, 200); pen.g.scale(1.4, 1.2); pen.g.translate(-300, -200); T.fxCloud(pen, i + 1);
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.667), new THREE.MeshBasicMaterial({ map: P.tex(c), transparent: true, fog: false, depthWrite: false }));
-    const a = r() * Math.PI * 2, d = 650 + r() * 250; m.position.set(Math.cos(a) * d, 120 + r() * 160, Math.sin(a) * d); m.scale.setScalar(160 + r() * 140);
-    m.userData.ndSkip = true; m.renderOrder = -1; scene.add(m); clouds.push(m);
-  } }
-
-// ---------- cards ----------
-const CW = 1200, CH = 2000, CM = 2.25; // canvas px, card height in metres (design 600x1000 -> 2.25 m)
-const cardGeo = new THREE.PlaneGeometry(CM * 0.6, CM); cardGeo.translate(0, CM / 2 - CM * 0.025, 0);
-const blobTex = P.tex(P.radial('20,14,30', 0.6));
-class Card {
-  constructor(scale = 1) {
-    [this.c, this.g] = (() => { const c = document.createElement('canvas'); c.width = CW; c.height = CH; return [c, c.getContext('2d')]; })();
-    this.t = new THREE.CanvasTexture(this.c); this.t.colorSpace = THREE.SRGBColorSpace; this.t.anisotropy = 4;
-    this.mat = new THREE.MeshBasicMaterial({ map: this.t, transparent: true, alphaTest: 0.02, side: THREE.DoubleSide, fog: true });
-    this.mesh = new THREE.Mesh(cardGeo, this.mat); this.mesh.userData.nd = cardNd(this.t); this.mesh.castShadow = true;
-    this.mesh.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: this.t, alphaTest: 0.5 });
-    this.blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false, fog: true }));
-    this.blob.rotation.x = -Math.PI / 2; this.blob.userData.ndSkip = true; this.blob.renderOrder = 1;
-    scene.add(this.mesh); scene.add(this.blob); this.key = ''; this.mesh.visible = this.blob.visible = false;
-  }
-  draw(key, fn) {
-    if (key === this.key) return; this.key = key;
-    const g = this.g; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, CW, CH); g.setTransform(CW / 600, 0, 0, CH / 1000, 0, 0);
-    const p = new T.Pen(g); fn(p); this.t.needsUpdate = true;
-  }
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const lerp3 = (A, B, t) => [lerp(A[0], B[0], t), lerp(A[1], B[1], t), lerp(A[2], B[2], t)];
+const smooth = (t) => { t = clamp(t); return t * t * t * (t * (t * 6 - 15) + 10); };
+const ramp = (f, a, b) => clamp((f - a) / (b - a));
+const blinkAt = (f, seed) => { const p = (f + seed * 17) % 101; return p < 3 ? Math.sin(p / 3 * Math.PI) : 0; };
+function setCam(pos, look, fov) {
+  camera.position.set(pos[0], pos[1], pos[2]);
+  camera.lookAt(look[0], look[1], look[2]);
+  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
 }
-const cards = []; const getCard = (i) => cards[i] || (cards[i] = new Card());
-
-// ---------- render targets & post ----------
-const rtColor = new THREE.WebGLRenderTarget(W, H, { samples: 0, type: THREE.HalfFloatType });
-const rtNd = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
-const rtInk = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType });
-const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), fsGeo = new THREE.PlaneGeometry(2, 2);
-const fs = (mat) => { const s = new THREE.Scene(); s.add(new THREE.Mesh(fsGeo, mat)); return s; };
-const inkU = { col: { value: rtColor.texture }, nd: { value: rtNd.texture }, res: { value: new THREE.Vector2(W, H) }, px: { value: 1.6 }, fogCol: { value: new THREE.Color() },
-  sat: { value: 1.08 }, lift: { value: new THREE.Color(0, 0, 0) }, gain: { value: new THREE.Color(1, 1, 1) }, vig: { value: 0.22 }, flash: { value: 0 } };
-const inkScene = fs(new THREE.ShaderMaterial({ uniforms: inkU, vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`,
-  fragmentShader: `uniform sampler2D col, nd; uniform vec2 res; uniform float px, sat, vig, flash; uniform vec3 fogCol, lift, gain; varying vec2 vUv;
-  float edgeAt(vec2 uv, float r){
-    vec4 c = texture2D(nd, uv); if (dot(c.rgb,c.rgb) < .01) return 0.; float d = c.a; vec3 n = c.rgb*2.-1.;
-    float e = 0.; float rr = r * clamp(7./d, .62, 1.25);
-    for (int i=0;i<16;i++){ float a = float(i)*.785398 + (i>7 ? .39 : 0.); float k = i>7 ? .5 : 1.;
-      vec2 o = vec2(cos(a), sin(a))*rr*k/res; vec4 s = texture2D(nd, uv+o);
-      float ds = s.a; bool card = dot(s.rgb,s.rgb) < .01;
-      if (card && ds > 0.) continue;            // character cards: never outlined by the world ink
-      if (card) ds = 1e4;                        // sky
-      vec3 ns = s.rgb*2.-1.;
-      if (n.y < .9) e = max(e, smoothstep(.006, .02, (ds - d)/d));             // depth jump, near side only; flat ground/sea exempt (grazing angles self-ink otherwise)
-      if (!card && abs(ds-d)/d < .06) e = max(e, smoothstep(.88, .72, dot(n, ns)) * .9); // crease
-    }
-    return e * (1. - smoothstep(140., 520., d)*.8);
-  }
-  void main(){
-    vec3 c = texture2D(col, vUv).rgb;
-    float e = edgeAt(vUv, px);
-    c = mix(c, vec3(.012,.01,.014), e);
-    if (flash < -0.5) c = vec3(e);
-    float l = dot(c, vec3(.299,.587,.114)); c = mix(vec3(l), c, sat);
-    c = c*gain + lift;
-    vec2 q = vUv-.5; c *= 1. - vig*dot(q*vec2(1.,.75), q*vec2(1.,.75))*2.2;
-    c = mix(c, vec3(1.), flash);
-    gl_FragColor = vec4(c,1.); }` }));
-const dofU = { src: { value: rtInk.texture }, nd: { value: rtNd.texture }, res: { value: new THREE.Vector2(W, H) }, focus: { value: 5 }, cinf: { value: 0 }, near: { value: 1 } };
-const dofScene = fs(new THREE.ShaderMaterial({ uniforms: dofU, vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`,
-  fragmentShader: `uniform sampler2D src, nd; uniform vec2 res; uniform float focus, cinf, near; varying vec2 vUv;
-  float coc(vec2 uv){ float d = texture2D(nd, uv).a; if (d <= 0.) d = 2000.; float k = 1. - focus/d; return k > 0. ? cinf*k : min(-k*cinf*near, cinf*1.4); }
-  void main(){
-    float c0 = coc(vUv);
-    if (cinf < .5 || c0 < .6) { gl_FragColor = linearToOutputTexel(vec4(texture2D(src, vUv).rgb, 1.)); return; }
-    vec3 acc = vec3(0.); float wsum = 0.;
-    for (int i=0;i<48;i++){ float fi = float(i); float r = sqrt((fi+.5)/48.); float a = fi*2.39996;
-      vec2 o = vec2(cos(a), sin(a))*r*c0/res; float cs = coc(vUv+o);
-      float w = smoothstep(r*c0-1.5, r*c0+.5, cs + .5);
-      acc += texture2D(src, vUv+o).rgb*w; wsum += w; }
-    gl_FragColor = linearToOutputTexel(vec4(acc/max(wsum,1e-3), 1.)); }` }));
-// final copy with sRGB handled by the renderer output (we render to screen with linear->sRGB in the shader chunk)
-dofScene.children[0].material.toneMapped = false;
-
-// ---------- per-frame state ----------
-const tmpV = new THREE.Vector3();
-function applyLight(L, f) {
-  hemi.color.set(L.sky); hemi.groundColor.set(L.ground); hemi.intensity = L.hemi;
-  sun.color.set(L.sun); sun.intensity = L.sunI;
-  scene.fog.color.set(L.fog); scene.fog.near = L.fogNear; scene.fog.far = L.fogFar;
-  skyU.top.value.set(L.skyTop); skyU.hor.value.set(L.skyHor); skyU.sunCol.value.set(L.sunDisc || '#000'); skyU.sunSize.value = L.sunSize || 0;
-  inkU.sat.value = L.sat; inkU.gain.value.set(L.gain || '#ffffff'); inkU.lift.value.set(L.lift || '#000000');
-  waterU.deep.value.set(L.waterDeep); waterU.shal.value.set(L.waterShal); waterU.glint.value.set(L.glint);
+function place(obj, x, z, ry) { obj.group.position.x = x; obj.group.position.z = z; obj.group.rotation.y = ry; }
+// camera keyframe pair over a shot window: linear drift (one move per shot)
+const K2 = (id, p0, l0, f0, p1, l1, f1) => ({ a: W[id][0], b: W[id][1], p0, l0, f0, p1: p1 || p0, l1: l1 || l0, f1: f1 === undefined ? f0 : f1 });
+function camK(km, f) {
+  const k = km.b > km.a ? (f - km.a) / (km.b - km.a) : 0;
+  setCam(lerp3(km.p0, km.p1, k), lerp3(km.l0, km.l1, k), lerp(km.f0, km.f1, k));
 }
-function placeSun(L, focus) {
-  // sun direction from azimuth/elevation in world space
-  const az = rx(L.az), el = rx(L.el); tmpV.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az));
-  skyU.sunDir.value.copy(tmpV);
-  sun.position.copy(focus).addScaledVector(tmpV, 80); sun.target.position.copy(focus);
-  const ext = L.shadowExt || 30, sc = sun.shadow.camera; sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext; sc.near = 1; sc.far = 200; sc.updateProjectionMatrix();
-}
+const SMOKE = { p1: 0.30, p2: 0.34, p3: 0.30, p4: 0.62, p5: 0.45, p6: 0.45, p7: 0.48, p8: 0.48, p9: 0.50, p10: 0.50, q1: 0.50, q2: 0.50, q3: 0.50, q4: 0.50, p11: 0.50, p12: 0.50, p13: 0.50, q5: 0.50, q6: 0.50, q7: 0.50, q8: 0.50, q9: 0.50, p14: 0.55, p15: 0.55, p16: 0.35, p17: 0.35, p18: 0.38, teaser: 0.40 };
+const ASH = { p5: [0.50, 0.4, -3.0], p6: [0.70, 0.4, -3.0], p7: [0.85, -0.6, -4.2], p8: [0.50, 0.2, -4.6], p9: [0.40, 0.4, -3.0], q1: [0.20, 4.6, -4.6], q2: [0.22, 4.6, -4.6], q3: [0.30, 4.6, -4.6], q4: [0.20, 4.6, -4.6], p10: [0.45, 0.2, -4.2], p11: [0.22, 0.4, -3.0], p13: [0.18, 4.6, -4.6], p18: [0.15, 0.6, 24.0] };
+const CODET = [0.9, -4.6], BUSITI = [-1.9, -6.8], SUMUR = [4.4, -5.4], PAKRT = [2.7, -4.1];
 
-function worldState(S, f) {
-  const amp = S.flagAmp ?? 0.05;
-  const pa = flagCloth.geometry.attributes.position, base = flagCloth.userData.cloth;
-  for (let i = 0; i < pa.count; i++) { const x = base[i * 3], y = base[i * 3 + 1]; pa.setZ(i, Math.sin(f * 0.22 + x * 2.6 + y * 1.2) * amp * (x + 0.95)); }
-  pa.needsUpdate = true;
-  waterU.t.value = f / 30;
-  const lampOn = !!S.lampOn;
-  lampLight.intensity = lampOn ? 8 : 0;
-  lampBulbMat.color.set(lampOn ? 0xffd9a0 : 0x554a38);
-}
-
-function drawActors(list, cam) {
-  cards.forEach((c) => { c.mesh.visible = c.blob.visible = false; });
-  list.forEach((a, i) => {
-    const c = getCard(i);
-    c.draw(a.key, a.draw);
-    c.mesh.visible = true; c.mesh.position.set(a.x, a.y, a.z);
-    const s = a.s || 1; c.mesh.scale.set(s * (a.flip ? -1 : 1), s, s);
-    c.mesh.rotation.set(0, Math.atan2(cam.position.x - a.x, cam.position.z - a.z) + (a.yaw || 0), a.roll || 0);
-    c.mat.color.set(a.tint || '#ffffff'); c.mat.opacity = a.alpha ?? 1;
-    c.mesh.castShadow = a.shadow !== false;
-    c.mesh.renderOrder = a.order || 2;
-    if (a.blob !== false && a.y < DECK + 0.5) { c.blob.visible = true; c.blob.position.set(a.x, (a.ground ?? DECK) + 0.02, a.z); c.blob.scale.set(0.95 * s, 0.6 * s, 1); }
+// ---------- cameras (kampung shots keep the approved story.js framing;
+// sky shots aim at the 3D volcano [-46,·,-148]; beach shots use the 3D beach
+// geography: shore at z≈22, mud/boats z≈33, sea beyond +z) ----------
+const CAMS = {
+  p1: K2('p1', [10.5, 3.2, 16.5], [-7.5, 2.2, -15], 43, [9.4, 3.0, 13.5], [-5.5, 2.0, -13.5], 41),
+  p2: K2('p2', [0, 6, -20], [-46, 34, -148], 36, [-2, 6.5, -22], [-47, 36, -148], 35),
+  p3: K2('p3', [4.6, 1.7, 1.8], [-16, 9, -90], 38, [4.5, 1.72, 1.6], [-16.5, 9.5, -92], 37),
+  p4: K2('p4', [-2, 7, -30], [-46, 38, -148], 30, [-5, 8.5, -40], [-46, 42, -148], 29),
+  p5: K2('p5', [2.2, 0.7, 1.8], [0.2, 1.6, -5.2], 42, [2.0, 0.75, 1.4], [0.2, 1.6, -5.2], 41),
+  p6: K2('p6', [7.5, 3.4, 6.5], [-3, 2.2, -8], 40, [4.5, 2.2, 4.5], [0.6, 1.3, -5.2], 38),
+  p7: K2('p7', [1.8, 1.9, 0.5], [-1.6, 1.4, -6.4], 37, [1.6, 1.85, 0.1], [-1.6, 1.4, -6.4], 36),
+  p8: K2('p8', [2.35, 1.85, 2.3], [-0.3, 1.35, -6.2], 38, [2.3, 1.85, 1.9], [-0.3, 1.35, -6.2], 37),
+  p9: K2('p9', [11.5, 3.6, 17.5], [-7.5, 2.0, -14], 44, [11.3, 3.55, 17.2], [-7.5, 2.0, -14], 44),
+  p10: K2('p10', [3.1, 1.9, 1.8], [-0.2, 1.35, -5.8], 38, [3.0, 1.9, 1.5], [-0.2, 1.35, -5.8], 37),
+  q1: K2('q1', [9.5, 3.0, 3.5], [4.4, 0.9, -5.4], 42, [9.0, 2.9, 3.0], [4.4, 0.9, -5.4], 41),
+  q2: K2('q2', [6.4, 1.5, -1.6], [4.4, 1.0, -5.4], 38, [6.2, 1.5, -1.9], [4.4, 1.0, -5.4], 37),
+  q3: K2('q3', [7.4, 1.6, -1.8], [4.1, 0.9, -5.2], 40, [7.2, 1.55, -2.1], [4.1, 0.9, -5.2], 40),
+  q4: K2('q4', [8.4, 2.3, 1.4], [3.9, 1.25, -4.8], 42, [8.2, 2.25, 1.1], [3.9, 1.25, -4.8], 41),
+  p11: K2('p11', [10.5, 3.2, 16.5], [-7.5, 2.2, -15], 43),
+  p12: K2('p12', [5.4, 0.8, 0.6], [3.4, 0.35, -2.6], 40, [5.2, 0.8, 0.3], [3.4, 0.35, -2.6], 40),
+  p13: K2('p13', [9.8, 1.7, 0.8], [5.0, 0.9, -6.2], 38, [9.3, 1.65, 0.3], [5.0, 0.9, -6.2], 38),
+  q5: K2('q5', [6.5, 1.8, -0.9], [3.2, 1.3, -4.2], 38, [6.3, 1.8, -1.2], [3.2, 1.3, -4.2], 37),
+  q6: K2('q6', [8.6, 2.4, 1.6], [3.0, 1.2, -4.6], 40, [8.4, 2.35, 1.3], [3.0, 1.2, -4.6], 40),
+  q7: K2('q7', [9.6, 3.0, 6.0], [2.0, 1.2, -5.0], 42, [9.4, 2.9, 5.7], [2.0, 1.2, -5.0], 42),
+  q8: K2('q8', [4.8, 1.6, -1.4], [2.7, 1.1, -4.1], 40, [4.7, 1.55, -1.6], [2.7, 1.1, -4.1], 40),
+  q9: K2('q9', [6.7, 1.7, -0.4], [5.0, 1.25, -3.0], 38, [6.6, 1.65, -0.7], [5.0, 1.25, -3.0], 38),
+  p14: K2('p14', [10.5, 3.2, 16.5], [-20, 10, -80], 42, [9.0, 3.4, 13.0], [-30, 16, -120], 40),
+  p15: K2('p15', [2.3, 1.7, 0.9], [0.9, 1.4, -4.6], 34),
+  p17: K2('p17', [9.5, 3.4, 12.5], [-1.5, 0.3, 33], 44, [9.0, 3.2, 13], [-1.5, 0.3, 33], 43),
+  p18: K2('p18', [4.6, 1.8, 26.2], [0.4, 1.2, 24.2], 36, [4.5, 1.75, 26.0], [0.4, 1.2, 24.2], 35),
+  teaser: K2('teaser', [9.5, 3.4, 12.5], [-1.5, 0.3, 34], 43),
+};
+const CH_HOME = [[2.4, -2.4], [3.6, -3.2], [1.8, -1.8], [4.8, -2.0]];
+function chickensIdle(f) {
+  chickens.forEach((ch, i) => {
+    ch.group.position.set(CH_HOME[i][0], 0, CH_HOME[i][1]);
+    ch.group.rotation.y = i * 1.7;
+    ch.update(f / FPS, { step: (f % (46 + i * 6)) / (46 + i * 6), flap: 0, run: 0, peck: Math.max(0, Math.sin(f * (0.09 + i * 0.02) + i * 2)) });
   });
 }
-
-const helmetState = () => {};
-
-const swapForNd = (on) => {
-  scene.traverse((o) => {
-    if (!o.isMesh) return;
-    if (on) {
-      o.userData.mat0 = o.material;
-      if (o.userData.ndSkip) { o.userData.vis0 = o.visible; o.visible = false; return; }
-      if (o === sky || o.userData.sky) { o.userData.vis0 = o.visible; o.visible = false; return; }
-      o.material = o.userData.nd || ndMat;
-    } else {
-      o.material = o.userData.mat0; if (o.userData.vis0 !== undefined) { o.visible = o.userData.vis0; delete o.userData.vis0; }
-    }
-  });
-};
 
 window.renderFrame = (f) => {
-  const S = shotAt(f), L = lightFor(S, f), C = camAt(f);
-  applyLight(L, f);
-  camera.position.set(...C.pos); camera.up.set(0, 1, 0); camera.lookAt(...C.look); camera.rotateZ(rx(C.roll || 0));
-  camera.fov = C.fov; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
-  const W_ = worldAt(f); worldState(W_, f);
-  placeSun(L, new THREE.Vector3(...(C.shadowAt || C.look)));
-  drawActors([...actorsAt(f, T), ...fxAt(f, T)], camera);
-  helmetState(W_.helmet);
-  sky.position.copy(camera.position);
-  for (const c of clouds) c.quaternion.copy(camera.quaternion);
-  // pass A: colour
-  renderer.setRenderTarget(rtColor); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera);
-  // pass B: normal + depth
-  const fog = scene.fog; scene.fog = null; const sm = renderer.shadowMap.enabled; renderer.shadowMap.enabled = false; renderer.shadowMap.autoUpdate = false;
-  swapForNd(true); renderer.setRenderTarget(rtNd); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera); swapForNd(false);
-  scene.fog = fog; renderer.shadowMap.enabled = sm; renderer.shadowMap.autoUpdate = true;
-  if (window.DEBUG_ND) { const dm = new THREE.MeshBasicMaterial({ map: rtNd.texture }); const ds = fs(dm); renderer.setRenderTarget(null); renderer.render(ds, fsCam); return true; }
-  // ink + grade
-  const D = dofAt(f);
-  inkU.px.value = 2.5; inkU.flash.value = window.DEBUG_E ? -1 : (C.flash || 0); inkU.vig.value = L.vig ?? 0.22;
-  renderer.setRenderTarget(rtInk); renderer.render(inkScene, fsCam);
-  // lens
-  dofU.focus.value = D.focus; dofU.cinf.value = D.cinf; dofU.near.value = D.near ?? 1;
-  renderer.setRenderTarget(null); renderer.render(dofScene, fsCam);
-  return true;
+  const t = f / FPS;
+  const S = shotAt(f);
+  world.setLight(LIGHT[S]);
+  beach.group.visible = f >= W.p16[0];
+  let fx = { smoke: SMOKE[S] ?? 0.4, lampOn: f >= LAMP_ON };
+  // defaults each frame
+  codet.setWalk(null); codet.setPose({ armL: 'down', armR: 'down' });
+  place(codet, CODET[0], CODET[1], 0.15); codet.group.position.y = 0;
+  place(busiti, -3.15, -6.15, 1.15);
+  place(pakrt, PAKRT[0], PAKRT[1], -0.3);
+  place(wargaA, -3.4, -1.6, Math.PI / 2); wargaA.setWalk(null);
+  place(wargaB, -8.2, -4.0, 0.5); wargaB.setWalk(null);
+  busiti.setFace({ expr: 'neutral', blink: blinkAt(f, 8), lip: 0 });
+  pakrt.setFace({ expr: 'neutral', blink: blinkAt(f, 6), lip: 0 });
+  wargaA.setFace({ expr: 'neutral', blink: blinkAt(f, 11), lip: 0 });
+  wargaB.setFace({ expr: 'neutral', blink: blinkAt(f, 14), lip: 0 });
+  codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.3, headTilt: 0, headPitch: 0 });
+  chickensIdle(f);
+  // ash cloud follows the shot table
+  const ash = ASH[S];
+  if (ash) {
+    ashPts.visible = true;
+    ashMat.opacity = ash[0] * 0.6;
+    ashPts.position.set(ash[1], 0.4, ash[2]);
+    const pos = ashGeo.attributes.position.array;
+    for (let i = 0; i < ASH_N; i++) {
+      let y = pos[i * 3 + 1] - 0.011 * ashSeed[i][3];
+      if (y < 0) y += 8;
+      pos[i * 3 + 1] = y;
+      pos[i * 3] += Math.sin(t * 0.7 + i) * 0.0012;
+    }
+    ashGeo.attributes.position.needsUpdate = true;
+  } else ashPts.visible = false;
+
+  switch (S) {
+    case 'p1': // payoff wide: the morning after — everyone up, but the light is wrong
+      camK(CAMS.p1, f);
+      codet.setPose({ armL: 'hold', armR: 'hold' });
+      busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
+      wargaB.setFace({ expr: 'worry', blink: blinkAt(f, 14), lip: 0 });
+      break;
+    case 'p2': // sky and the smoking peak only
+      camK(CAMS.p2, f);
+      break;
+    case 'p3': // PAK RT dialogue, over his shoulder, looking up (lipsync c2)
+      camK(CAMS.p3, f);
+      place(pakrt, PAKRT[0], PAKRT[1], -0.35);
+      pakrt.setFace({ expr: 'talk', blink: blinkAt(f, 6), lip: lipV('p3', f), look: -0.2, headTilt: -8 + 1.5 * Math.sin(f * 0.1) });
+      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.35, headTilt: -6, headPitch: -10 });
+      break;
+    case 'p4': // the mountain alone, smoking black
+      camK(CAMS.p4, f);
+      break;
+    case 'p5': // low angle: ash begins to fall past the camera, Codet under it
+      camK(CAMS.p5, f);
+      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.2, headTilt: -10, headPitch: -14 });
+      busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
+      break;
+    case 'p6': // everything turns grey
+      camK(CAMS.p6, f);
+      codet.setPose({ armL: 'hold', armR: 'hold' });
+      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0, headTilt: 3 });
+      busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
+      break;
+    case 'p7': { // BU SITI dialogue at the warung (lipsync c5); Codet hurries in to help
+      camK(CAMS.p7, f);
+      place(busiti, BUSITI[0], BUSITI[1], 0.9);
+      busiti.setFace({ expr: 'talk', blink: blinkAt(f, 8), lip: lipV('p7', f), headTilt: 3.5 * Math.sin(f * 0.16) });
+      const wIn = ramp(f, W.p7[0] + 0.55 * (W.p7[1] - W.p7[0]), W.p7[1]);
+      const wx = lerp(3.6, 2.2, smooth(wIn));
+      place(codet, wx, -3.2, -Math.PI / 2 + 0.3);
+      if (wIn > 0 && wIn < 1) codet.setWalk((f - W.p7[0]) * 0.30);
+      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: -0.3 });
+      break;
+    }
+    case 'p8': // close-up: Bu Siti reaches up and clicks the warung lamp on at 10 AM
+      camK(CAMS.p8, f);
+      place(busiti, -2.9, -6.0, 0.9);
+      busiti.setArm(1, f >= LAMP_ON ? 'down' : 'up');
+      busiti.setFace({ expr: f >= LAMP_ON ? 'worry' : 'neutral', blink: blinkAt(f, 8), lip: 0, look: 0.1 });
+      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: -0.25 });
+      break;
+    case 'p9': // wide: midday dark as night, one warm lamp in the gloom
+      camK(CAMS.p9, f);
+      busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
+      wargaB.setFace({ expr: 'nervous', blink: blinkAt(f, 14), lip: 0 });
+      break;
+    case 'p10': { // two-shot at the warung: Codet asks (lipsync c7); Bu Siti has no answer
+      camK(CAMS.p10, f);
+      const late = ramp(f, W.p10[0] + 0.75 * (W.p10[1] - W.p10[0]), W.p10[1]);
+      codet.setFace({ expr: late > 0.5 ? 'scared' : 'think', lip: lipAt('p10', f), blink: blinkAt(f, 3), look: -0.25 });
+      busiti.setFace({ expr: late > 0.5 ? 'shock' : 'worry', blink: blinkAt(f, 8), lip: 0 });
+      break;
+    }
+    case 'q1': // the well crowd: everyone gathered, one villager drawing water
+      camK(CAMS.q1, f);
+      place(busiti, SUMUR[0], SUMUR[1], 0.8);
+      busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
+      place(wargaA, 5.9, -4.3, -0.6); wargaA.setWalk(0.3);
+      wargaA.setFace({ expr: 'nervous', blink: blinkAt(f, 11), lip: 0 });
+      place(codet, 6.9, -3.2, -0.5);
+      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.3 });
+      break;
+    case 'q2': // the draw: the bucket comes up, the villager holds the dipper a long time
+      camK(CAMS.q2, f);
+      place(wargaA, 5.2, -4.6, -0.4);
+      wargaA.setArm(1, 'up');
+      wargaA.setFace({ expr: 'nervous', blink: blinkAt(f, 11), lip: 0, look: 0.2, headTilt: -6 + 1.5 * Math.sin(f * 0.08) });
+      place(busiti, SUMUR[0], SUMUR[1], 0.8);
+      busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
+      codet.group.visible = false;
+      break;
+    case 'q3': // the water is warm — Codet sniffs the sulphur in the air
+      camK(CAMS.q3, f);
+      place(codet, 4.0, -4.9, 0.4);
+      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.3, headTilt: -4, headPitch: 6 });
+      place(busiti, SUMUR[0], SUMUR[1], 0.8);
+      busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
+      fx.wellWarm = true;
+      break;
+    case 'q4': // BU SITI dialogue at the well (lipsync c12); Pak RT listens
+      camK(CAMS.q4, f);
+      place(busiti, SUMUR[0], SUMUR[1], 0.8);
+      busiti.setFace({ expr: 'talk', blink: blinkAt(f, 8), lip: lipV('q4', f), headTilt: 3 * Math.sin(f * 0.14) });
+      place(pakrt, 3.4, -4.2, 0.5);
+      pakrt.setFace({ expr: 'worry', blink: blinkAt(f, 6), lip: 0, look: 0.25, headTilt: -6 });
+      codet.group.visible = false;
+      break;
+    case 'p11': // no one answers: the whole kampung frozen mid-breath
+      camK(CAMS.p11, f);
+      codet.setPose({ armL: 'hold', armR: 'hold' });
+      codet.setFace({ expr: 'think', lip: 0, blink: 0, look: 0.2, headTilt: -6 });
+      busiti.setFace({ expr: 'worry', blink: 0, lip: 0 });
+      wargaB.setFace({ expr: 'nervous', blink: 0, lip: 0, look: 0.4 });
+      wargaA.setWalk(0.35 * Math.PI * 2); // frozen mid-stride
+      wargaA.setFace({ expr: 'nervous', blink: 0, lip: 0, look: 0.4 });
+      break;
+    case 'p12': // the chickens, silent and alert for the first time ever
+      camK(CAMS.p12, f);
+      chickens.forEach((ch, i) => {
+        ch.group.position.set(CH_HOME[i][0], 0, CH_HOME[i][1]);
+        ch.group.rotation.y = i * 1.7;
+        ch.update(t, { step: [0.2, 0.55, 0.8, 0.35][i], flap: 0, run: 0, peck: 0 });
+      });
+      codet.group.visible = false; busiti.group.visible = false;
+      break;
+    case 'p13': // the well: yesterday muddy, today warm
+      camK(CAMS.p13, f);
+      place(busiti, SUMUR[0], SUMUR[1], 0.8);
+      busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
+      place(codet, 6.8, -3.4, -0.5);
+      codet.setFace({ expr: 'think', lip: 0, blink: blinkAt(f, 3), look: 0.3 });
+      fx.wellWarm = true;
+      break;
+    case 'q5': // PAK RT dialogue: calming the crowd (lipsync c13, part 1)
+      camK(CAMS.q5, f);
+      pakrt.setArm(-1, 'up'); pakrt.setArm(1, 'up');
+      pakrt.setFace({ expr: 'talk', blink: blinkAt(f, 6), lip: lipV('q5', f), look: 0, headTilt: -4 });
+      busiti.setFace({ expr: 'worry', blink: blinkAt(f, 8), lip: 0 });
+      wargaA.setFace({ expr: 'nervous', blink: blinkAt(f, 11), lip: 0, look: 0.4 });
+      break;
+    case 'q6': // "mungkin cuma cuaca" — the villagers look at each other (lipsync c13, part 2)
+      camK(CAMS.q6, f);
+      pakrt.setFace({ expr: 'talk', blink: blinkAt(f, 6), lip: lipV('q5', f, W.q5[0]), look: 0, headTilt: -4 });
+      wargaA.setFace({ expr: 'nervous', blink: blinkAt(f, 11), lip: 0, look: 0.4 });
+      wargaB.setFace({ expr: 'nervous', blink: blinkAt(f, 14), lip: 0, look: -0.3 });
+      codet.group.visible = false;
+      break;
+    case 'q7': // "Semua pulang ke rumah masing-masing" — nobody moves
+      camK(CAMS.q7, f);
+      pakrt.setFace({ expr: 'worry', blink: 0, lip: 0, look: 0.3, headTilt: -4 });
+      busiti.setFace({ expr: 'worry', blink: 0, lip: 0 });
+      wargaA.setFace({ expr: 'nervous', blink: 0, lip: 0, look: 0.4 });
+      wargaB.setFace({ expr: 'nervous', blink: 0, lip: 0, look: -0.3 });
+      codet.group.visible = false;
+      break;
+    case 'q8': // close-up: Pak RT's hands tremble as he speaks
+      camK(CAMS.q8, f);
+      pakrt.group.position.x = PAKRT[0] + 0.012 * Math.sin(f * 0.9);
+      pakrt.group.position.y = 0.008 * Math.sin(f * 1.13);
+      pakrt.setFace({ expr: 'shock', blink: blinkAt(f, 6), lip: 0, look: 0.2, headTilt: -6 });
+      codet.group.visible = false; busiti.group.visible = false;
+      break;
+    case 'q9': // cut to Codet: he notices the trembling hands
+      camK(CAMS.q9, f);
+      place(codet, 5.0, -3.0, -0.6);
+      codet.setFace({ expr: 'shocked', lip: 0, blink: blinkAt(f, 3), look: 0.4, headTilt: -3 });
+      busiti.group.visible = false; pakrt.group.visible = false;
+      break;
+    case 'p14': { // the sound returns — bigger, closer; everyone looks up
+      camK(CAMS.p14, f);
+      if (f > W.p14[1] - 0.2 * (W.p14[1] - W.p14[0])) { // a tremor heralds it
+        camera.position.x += 0.018 * Math.sin(f * 2.1);
+        camera.position.y += 0.011 * Math.sin(f * 2.9);
+      }
+      codet.setFace({ expr: 'scared', lip: 0, blink: blinkAt(f, 3), look: 0, headTilt: -8, headPitch: -12 });
+      busiti.setFace({ expr: 'shock', blink: blinkAt(f, 8), lip: 0 });
+      wargaB.setFace({ expr: 'shock', blink: blinkAt(f, 14), lip: 0 });
+      break;
+    }
+    case 'p15': { // glasses ping, the ground shakes — a deep shudder, stronger than Ep.1
+      camK(CAMS.p15, f);
+      if (f >= W.p15[0] + 8) {
+        const d = f - W.p15[0] - 8, amp = 0.085 * Math.exp(-d / 26);
+        camera.position.x += amp * Math.sin(f * 1.9);
+        camera.position.y += amp * 0.7 * Math.sin(f * 2.6 + 1);
+      }
+      codet.setFace({ expr: 'scared', lip: 0, blink: blinkAt(f, 3), look: 0.1, headTilt: -3 });
+      busiti.setFace({ expr: 'shock', blink: blinkAt(f, 8), lip: 0 });
+      fx.burst = ramp(f, W.p15[0], W.p15[0] + 0.4 * (W.p15[1] - W.p15[0]));
+      break;
+    }
+    case 'p16': { // Codet runs for the beach — tracking shot, camera alongside at a fixed gap
+      const k = smooth(ramp(f, W.p16[0], W.p16[1]));
+      const cx = lerp(2.4, 0.9, k), cz = lerp(8.5, 20.8, k);
+      place(codet, cx, cz, -0.12);
+      codet.setFacing(-0.12);
+      codet.setWalk((f - W.p16[0]) * 0.85);
+      codet.setFace({ expr: 'scared', lip: 0, blink: blinkAt(f, 3), look: 0.3, headTilt: 3 });
+      setCam([cx + 5.2, 1.9, cz + 1.2], [cx, 1.05, cz], 40);
+      busiti.group.visible = false; pakrt.group.visible = false;
+      break;
+    }
+    case 'p17': { // the reveal: Codet arrives at the shore and stops dead
+      camK(CAMS.p17, f);
+      const a = W.p17[0], mv = ramp(f, a, a + 0.3 * (W.p17[1] - a));
+      const cz = lerp(20.8, 24.3, smooth(mv));
+      place(codet, lerp(0.9, 0.6, smooth(mv)), cz, -0.05);
+      if (mv < 1) codet.setWalk((f - a) * 0.8);
+      codet.setFace({ expr: 'scared', lip: 0, blink: blinkAt(f, 3), look: 0.4, headTilt: -4 });
+      busiti.group.visible = false; pakrt.group.visible = false;
+      break;
+    }
+    case 'p18': // close on Codet: the sea has run away and nobody told it to
+      camK(CAMS.p18, f);
+      place(codet, 0.6, 24.3, -0.05);
+      codet.setFace({ expr: f < W.p18[0] + 0.3 * (W.p18[1] - W.p18[0]) ? 'shocked' : 'scared', lip: 0, blink: blinkAt(f, 3), look: 0.5, headTilt: -4 });
+      busiti.group.visible = false; pakrt.group.visible = false;
+      break;
+    case 'teaser': // held wide over the dark sea; the card text is laid in during post
+      camK(CAMS.teaser, f);
+      place(codet, 0.6, 24.3, -0.05);
+      codet.setFace({ expr: 'scared', lip: 0, blink: blinkAt(f, 3), look: 0.4, headTilt: -4 });
+      busiti.group.visible = false; pakrt.group.visible = false;
+      break;
+  }
+  // cast per shot (from the approved story.js actor map) — applied every frame
+  const CAST = { p1: ['codet', 'busiti', 'wargaB'], p2: [], p3: ['pakrt', 'codet'], p4: [], p5: ['codet', 'busiti'], p6: ['codet', 'busiti'], p7: ['busiti', 'codet'], p8: ['busiti', 'codet'], p9: ['codet', 'busiti', 'wargaB'], p10: ['codet', 'busiti'], q1: ['busiti', 'wargaA', 'codet'], q2: ['wargaA', 'busiti'], q3: ['codet', 'busiti'], q4: ['busiti', 'pakrt'], p11: ['codet', 'busiti', 'wargaB', 'wargaA'], p12: [], p13: ['busiti', 'codet'], q5: ['pakrt', 'busiti', 'wargaA'], q6: ['pakrt', 'wargaA', 'wargaB'], q7: ['pakrt', 'busiti', 'wargaA', 'wargaB'], q8: ['pakrt'], q9: ['codet'], p14: ['codet', 'busiti', 'wargaB'], p15: ['codet', 'busiti'], p16: ['codet'], p17: ['codet'], p18: ['codet'], teaser: ['codet'] };
+  const cast = CAST[S] || [];
+  codet.group.visible = cast.includes('codet');
+  busiti.group.visible = cast.includes('busiti');
+  pakrt.group.visible = cast.includes('pakrt');
+  wargaA.group.visible = cast.includes('wargaA');
+  wargaB.group.visible = cast.includes('wargaB');
+
+  codet.update(t); busiti.update(t); pakrt.update(t); wargaA.update(t); wargaB.update(t);
+  world.update(t, fx);
+  renderer.render(scene, camera);
 };
-window.TOTAL = TOTAL;
+window.renderFrame(50);
 window.ready = true;
